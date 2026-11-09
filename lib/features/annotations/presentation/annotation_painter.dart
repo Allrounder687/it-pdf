@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../domain/annotation_model.dart';
 
 /// Canvas painter that renders vector annotations on a PDF page overlay.
+/// Supports smooth freehand ink, highlighters, text markups, shapes, arrows, and sticky notes.
 class AnnotationPainter extends CustomPainter {
   final List<Annotation> annotations;
   final List<NormalizedPoint> activePoints;
@@ -24,14 +25,14 @@ class AnnotationPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Draw saved annotations
+    // 1. Draw persistent annotations
     for (final ann in annotations) {
       _drawAnnotation(canvas, size, ann, ann.id == selectedId);
     }
 
-    // 2. Draw active in-progress stroke
+    // 2. Draw active in-progress gesture / stroke
     if (isDrawing && activePoints.length > 1) {
-      _drawActiveStroke(canvas, size);
+      _drawActiveGesture(canvas, size);
     }
   }
 
@@ -45,7 +46,6 @@ class AnnotationPainter extends CustomPainter {
 
     if (ann.type == AnnotationType.highlight) {
       paint.blendMode = BlendMode.multiply;
-      paint.strokeCap = StrokeCap.square;
     }
 
     switch (ann.type) {
@@ -65,6 +65,42 @@ class AnnotationPainter extends CustomPainter {
           final last = ann.points.last.toOffset(size);
           path.lineTo(last.dx, last.dy);
           canvas.drawPath(path, paint);
+        } else if (ann.rect != null && ann.type == AnnotationType.highlight) {
+          final fillPaint = Paint()
+            ..color = ann.color.withValues(alpha: 0.35)
+            ..style = PaintingStyle.fill
+            ..blendMode = BlendMode.multiply;
+          canvas.drawRect(ann.rect!.toRect(size), fillPaint);
+        }
+        break;
+
+      case AnnotationType.underline:
+        if (ann.rect != null) {
+          final rect = ann.rect!.toRect(size);
+          final linePaint = Paint()
+            ..color = ann.color
+            ..strokeWidth = ann.strokeWidth.clamp(1.5, 4.0)
+            ..style = PaintingStyle.stroke;
+          canvas.drawLine(
+            Offset(rect.left, rect.bottom - 1),
+            Offset(rect.right, rect.bottom - 1),
+            linePaint,
+          );
+        }
+        break;
+
+      case AnnotationType.strikethrough:
+        if (ann.rect != null) {
+          final rect = ann.rect!.toRect(size);
+          final linePaint = Paint()
+            ..color = ann.color
+            ..strokeWidth = ann.strokeWidth.clamp(1.5, 4.0)
+            ..style = PaintingStyle.stroke;
+          canvas.drawLine(
+            Offset(rect.left, rect.center.dy),
+            Offset(rect.right, rect.center.dy),
+            linePaint,
+          );
         }
         break;
 
@@ -94,13 +130,48 @@ class AnnotationPainter extends CustomPainter {
         if (ann.rect != null) {
           final rect = ann.rect!.toRect(size);
           final notePaint = Paint()
-            ..color = ann.color.withValues(alpha: 0.9)
+            ..color = ann.color.withValues(alpha: 0.95)
             ..style = PaintingStyle.fill;
+          final shadowPaint = Paint()
+            ..color = Colors.black26
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect.shift(const Offset(1, 1)), const Radius.circular(4)),
+            shadowPaint,
+          );
           canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(4)), notePaint);
+
+          // Draw note glyph lines
+          final glyphPaint = Paint()
+            ..color = Colors.black54
+            ..strokeWidth = 1.2
+            ..style = PaintingStyle.stroke;
+          final startX = rect.left + 4;
+          final endX = rect.right - 4;
+          if (endX > startX) {
+            canvas.drawLine(Offset(startX, rect.top + 6), Offset(endX, rect.top + 6), glyphPaint);
+            canvas.drawLine(Offset(startX, rect.top + 10), Offset(endX, rect.top + 10), glyphPaint);
+          }
         }
         break;
 
-      default:
+      case AnnotationType.textCallout:
+        if (ann.rect != null && ann.textContent != null) {
+          final rect = ann.rect!.toRect(size);
+          final bgPaint = Paint()
+            ..color = Colors.white.withValues(alpha: 0.9)
+            ..style = PaintingStyle.fill;
+          canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), bgPaint);
+          canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), paint);
+
+          final textSpan = TextSpan(
+            text: ann.textContent,
+            style: TextStyle(color: ann.color, fontSize: 12),
+          );
+          final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
+          textPainter.layout(maxWidth: rect.width - 4);
+          textPainter.paint(canvas, Offset(rect.left + 2, rect.top + 2));
+        }
         break;
     }
 
@@ -113,13 +184,16 @@ class AnnotationPainter extends CustomPainter {
     }
   }
 
-  void _drawActiveStroke(Canvas canvas, Size size) {
+  void _drawActiveGesture(Canvas canvas, Size size) {
+    final start = activePoints.first.toOffset(size);
+    final end = activePoints.last.toOffset(size);
+
     final paint = Paint()
       ..color = activeTool == AnnotationTool.highlighter
           ? activeColor.withValues(alpha: 0.4)
           : activeColor
       ..strokeWidth = activeTool == AnnotationTool.highlighter ? 18.0 : activeStrokeWidth
-      ..style = PaintingStyle.stroke
+      ..style = (activeTool == AnnotationTool.stickyNote) ? PaintingStyle.fill : PaintingStyle.stroke
       ..strokeCap = activeTool == AnnotationTool.highlighter ? StrokeCap.square : StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
@@ -127,20 +201,50 @@ class AnnotationPainter extends CustomPainter {
       paint.blendMode = BlendMode.multiply;
     }
 
-    final path = Path();
-    final first = activePoints.first.toOffset(size);
-    path.moveTo(first.dx, first.dy);
+    switch (activeTool) {
+      case AnnotationTool.arrow:
+        _drawArrow(canvas, start, end, paint);
+        break;
 
-    for (int i = 1; i < activePoints.length; i++) {
-      final p1 = activePoints[i - 1].toOffset(size);
-      final p2 = activePoints[i].toOffset(size);
-      final mid = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
-      path.quadraticBezierTo(p1.dx, p1.dy, mid.dx, mid.dy);
+      case AnnotationTool.rectangle:
+        final rect = Rect.fromPoints(start, end);
+        canvas.drawRect(rect, paint);
+        break;
+
+      case AnnotationTool.circle:
+        final rect = Rect.fromPoints(start, end);
+        canvas.drawOval(rect, paint);
+        break;
+
+      case AnnotationTool.underline:
+        final rect = Rect.fromPoints(start, end);
+        canvas.drawLine(Offset(rect.left, rect.bottom), Offset(rect.right, rect.bottom), paint);
+        break;
+
+      case AnnotationTool.strikethrough:
+        final rect = Rect.fromPoints(start, end);
+        canvas.drawLine(Offset(rect.left, rect.center.dy), Offset(rect.right, rect.center.dy), paint);
+        break;
+
+      case AnnotationTool.stickyNote:
+        final rect = Rect.fromLTWH(end.dx - 14, end.dy - 14, 28, 28);
+        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(4)), paint);
+        break;
+
+      default:
+        // Freehand ink / marker / highlighter
+        final path = Path();
+        path.moveTo(start.dx, start.dy);
+        for (int i = 1; i < activePoints.length; i++) {
+          final p1 = activePoints[i - 1].toOffset(size);
+          final p2 = activePoints[i].toOffset(size);
+          final mid = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+          path.quadraticBezierTo(p1.dx, p1.dy, mid.dx, mid.dy);
+        }
+        path.lineTo(end.dx, end.dy);
+        canvas.drawPath(path, paint);
+        break;
     }
-    final last = activePoints.last.toOffset(size);
-    path.lineTo(last.dx, last.dy);
-
-    canvas.drawPath(path, paint);
   }
 
   void _drawArrow(Canvas canvas, Offset start, Offset end, Paint paint) {

@@ -7,12 +7,16 @@ class OutlineItem {
   final int targetPage;
   final PdfDest? dest;
   final int level;
+  final double? destinationTop;
+  final double? destinationLeft;
 
   const OutlineItem({
     required this.title,
     required this.targetPage,
     this.dest,
     this.level = 0,
+    this.destinationTop,
+    this.destinationLeft,
   });
 }
 
@@ -107,7 +111,9 @@ class OutlineDrawer extends StatelessWidget {
                                   Icon(
                                     entry.level == 0 ? Icons.folder_open : Icons.article_outlined,
                                     size: 16,
-                                    color: isCurrentPage ? Colors.blueAccent : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                                    color: isCurrentPage
+                                        ? Colors.blueAccent
+                                        : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(

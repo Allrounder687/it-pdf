@@ -4,17 +4,22 @@ import 'dart:ui';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 import '../../features/annotations/domain/annotation_model.dart';
 import '../logging/app_logger.dart';
+import '../storage/safe_document_storage.dart';
 
 /// Hierarchical outline entry representing a document chapter or section bookmark.
 class PdfOutlineEntry {
   final String title;
   final int targetPage; // 1-based page number
   final int level;
+  final double? destinationTop;
+  final double? destinationLeft;
 
   const PdfOutlineEntry({
     required this.title,
     required this.targetPage,
     this.level = 0,
+    this.destinationTop,
+    this.destinationLeft,
   });
 }
 
@@ -22,8 +27,12 @@ class PdfOutlineEntry {
 /// Provides lossless vector compilation, page assembly, annotation burning,
 /// AcroForm inspection and AES-256 document security.
 class SyncfusionPdfService {
-  /// Losslessly merges multiple PDF files into a single destination file
-  /// preserving vector paths, TrueType fonts, resolution and layout.
+  final SafeDocumentStorage _safeStorage;
+
+  SyncfusionPdfService({SafeDocumentStorage? safeStorage})
+      : _safeStorage = safeStorage ?? SafeDocumentStorage();
+
+  /// Merges multiple PDF files into a single destination file.
   Future<String> mergePdfs({
     required List<String> sourcePaths,
     required String outputPath,
@@ -55,15 +64,22 @@ class SyncfusionPdfService {
       }
 
       final mergedBytes = mergedDoc.saveSync();
-      await _atomicWrite(outputPath, Uint8List.fromList(mergedBytes));
+      final result = await _safeStorage.transactionalSaveBytes(
+        targetPath: outputPath,
+        bytes: Uint8List.fromList(mergedBytes),
+      );
+      if (!result.isSuccess) {
+        throw StateError(result.errorMessage ?? 'Merge save failed');
+      }
       return outputPath;
     } finally {
       mergedDoc.dispose();
     }
   }
 
-  /// Extracts selected pages with custom rotation from a source PDF into a new PDF
-  /// preserving original vector fidelity and fonts.
+  /// Extracts selected pages with custom rotation from a source PDF.
+  /// Uses direct page removal to preserve original page semantics,
+  /// annotations, forms, and fonts for the extracted pages wherever possible.
   Future<String> extractPages({
     required String sourcePath,
     required List<int> pageNumbers, // 1-based page numbers
@@ -73,31 +89,102 @@ class SyncfusionPdfService {
     final file = File(sourcePath);
     final bytes = await file.readAsBytes();
     final sourceDoc = sf.PdfDocument(inputBytes: bytes);
-    final outputDoc = sf.PdfDocument();
 
     try {
-      for (final pageNum in pageNumbers) {
-        if (pageNum < 1 || pageNum > sourceDoc.pages.count) continue;
-        final srcPage = sourceDoc.pages[pageNum - 1];
-        final template = srcPage.createTemplate();
-
-        final rotationDegrees = pageRotations[pageNum] ?? 0;
-        final newPage = outputDoc.pages.add();
-        newPage.rotation = _mapRotation(rotationDegrees);
-
-        newPage.graphics.drawPdfTemplate(
-          template,
-          const Offset(0, 0),
-          Size(srcPage.size.width, srcPage.size.height),
-        );
+      final selectedSet = pageNumbers.toSet();
+      // Remove pages that are NOT in the selection in descending order
+      for (int i = sourceDoc.pages.count - 1; i >= 0; i--) {
+        final pageNum = i + 1;
+        if (!selectedSet.contains(pageNum)) {
+          sourceDoc.pages.removeAt(i);
+        }
       }
 
-      final outputBytes = outputDoc.saveSync();
-      await _atomicWrite(outputPath, Uint8List.fromList(outputBytes));
+      // Apply rotations to remaining pages
+      for (int i = 0; i < sourceDoc.pages.count; i++) {
+        final originalPageNum = pageNumbers[i];
+        final rotDegrees = pageRotations[originalPageNum] ?? 0;
+        if (rotDegrees > 0) {
+          sourceDoc.pages[i].rotation = _mapRotation(rotDegrees);
+        }
+      }
+
+      final outputBytes = sourceDoc.saveSync();
+      final result = await _safeStorage.transactionalSaveBytes(
+        targetPath: outputPath,
+        bytes: Uint8List.fromList(outputBytes),
+      );
+      if (!result.isSuccess) {
+        throw StateError(result.errorMessage ?? 'Extraction save failed');
+      }
       return outputPath;
     } finally {
       sourceDoc.dispose();
-      outputDoc.dispose();
+    }
+  }
+
+  /// Losslessly deletes specific pages from a document.
+  Future<String> deletePagesFromDocument({
+    required String sourcePath,
+    required List<int> pageNumbersToDelete, // 1-based
+    required String outputPath,
+  }) async {
+    final file = File(sourcePath);
+    final bytes = await file.readAsBytes();
+    final doc = sf.PdfDocument(inputBytes: bytes);
+
+    try {
+      final toDelete = pageNumbersToDelete.map((p) => p - 1).toSet().toList()..sort();
+      for (int i = toDelete.length - 1; i >= 0; i--) {
+        final idx = toDelete[i];
+        if (idx >= 0 && idx < doc.pages.count) {
+          doc.pages.removeAt(idx);
+        }
+      }
+
+      final outputBytes = doc.saveSync();
+      final result = await _safeStorage.transactionalSaveBytes(
+        targetPath: outputPath,
+        bytes: Uint8List.fromList(outputBytes),
+      );
+      if (!result.isSuccess) {
+        throw StateError(result.errorMessage ?? 'Delete pages save failed');
+      }
+      return outputPath;
+    } finally {
+      doc.dispose();
+    }
+  }
+
+  /// Losslessly updates rotation on specified pages in a document.
+  Future<String> rotatePagesInDocument({
+    required String sourcePath,
+    required Map<int, int> pageRotations, // 1-based page -> degrees
+    required String outputPath,
+  }) async {
+    final file = File(sourcePath);
+    final bytes = await file.readAsBytes();
+    final doc = sf.PdfDocument(inputBytes: bytes);
+
+    try {
+      for (final entry in pageRotations.entries) {
+        final pageIdx = entry.key - 1;
+        if (pageIdx >= 0 && pageIdx < doc.pages.count) {
+          doc.pages[pageIdx].rotation = _mapRotation(entry.value);
+        }
+      }
+
+      final outputBytes = doc.saveSync();
+      final result = await _safeStorage.transactionalSaveBytes(
+        targetPath: outputPath,
+        bytes: Uint8List.fromList(outputBytes),
+      );
+      if (!result.isSuccess) {
+        throw StateError(result.errorMessage ?? 'Rotate pages save failed');
+      }
+      return outputPath;
+    } finally {
+      doc.dispose();
     }
   }
 
@@ -125,15 +212,38 @@ class SyncfusionPdfService {
 
         switch (ann.type) {
           case AnnotationType.highlight:
+            if (ann.rect != null) {
+              final rect = ann.rect!.toRect(pageSize);
+              final markup = sf.PdfTextMarkupAnnotation(
+                rect,
+                ann.textContent ?? '',
+                pdfColor,
+                textMarkupAnnotationType: sf.PdfTextMarkupAnnotationType.highlight,
+              );
+              page.annotations.add(markup);
+            } else if (ann.points.length > 1) {
+              // Freeform highlighter strokes: draw smooth translucent stroke
+              page.graphics.save();
+              page.graphics.setTransparency(ann.opacity > 0 ? ann.opacity : 0.4);
+              final pen = sf.PdfPen(pdfColor, width: ann.strokeWidth);
+              pen.lineCap = sf.PdfLineCap.round;
+              pen.lineJoin = sf.PdfLineJoin.round;
+              for (int i = 1; i < ann.points.length; i++) {
+                final pt1 = ann.points[i - 1].toOffset(pageSize);
+                final pt2 = ann.points[i].toOffset(pageSize);
+                page.graphics.drawLine(pen, Offset(pt1.dx, pt1.dy), Offset(pt2.dx, pt2.dy));
+              }
+              page.graphics.restore();
+            }
+            break;
+
           case AnnotationType.underline:
           case AnnotationType.strikethrough:
             if (ann.rect != null) {
               final rect = ann.rect!.toRect(pageSize);
               final markupType = ann.type == AnnotationType.underline
                   ? sf.PdfTextMarkupAnnotationType.underline
-                  : (ann.type == AnnotationType.strikethrough
-                      ? sf.PdfTextMarkupAnnotationType.strikethrough
-                      : sf.PdfTextMarkupAnnotationType.highlight);
+                  : sf.PdfTextMarkupAnnotationType.strikethrough;
 
               final markup = sf.PdfTextMarkupAnnotation(
                 rect,
@@ -179,6 +289,7 @@ class SyncfusionPdfService {
                 [p1.dx.toInt(), p1.dy.toInt(), p2.dx.toInt(), p2.dy.toInt()],
                 ann.textContent ?? '',
                 color: pdfColor,
+                border: sf.PdfAnnotationBorder(ann.strokeWidth.clamp(1.0, 10.0)),
               );
               lineAnn.endLineStyle = sf.PdfLineEndingStyle.openArrow;
               page.annotations.add(lineAnn);
@@ -199,15 +310,19 @@ class SyncfusionPdfService {
 
           case AnnotationType.ink:
             if (ann.points.length > 1) {
+              page.graphics.save();
+              if (ann.opacity < 1.0) {
+                page.graphics.setTransparency(ann.opacity);
+              }
+              final pen = sf.PdfPen(pdfColor, width: ann.strokeWidth);
+              pen.lineCap = sf.PdfLineCap.round;
+              pen.lineJoin = sf.PdfLineJoin.round;
               for (int i = 1; i < ann.points.length; i++) {
                 final pt1 = ann.points[i - 1].toOffset(pageSize);
                 final pt2 = ann.points[i].toOffset(pageSize);
-                page.graphics.drawLine(
-                  sf.PdfPen(pdfColor, width: ann.strokeWidth),
-                  Offset(pt1.dx, pt1.dy),
-                  Offset(pt2.dx, pt2.dy),
-                );
+                page.graphics.drawLine(pen, Offset(pt1.dx, pt1.dy), Offset(pt2.dx, pt2.dy));
               }
+              page.graphics.restore();
             }
             break;
 
@@ -217,14 +332,20 @@ class SyncfusionPdfService {
       }
 
       final outputBytes = doc.saveSync();
-      await _atomicWrite(outputPath, Uint8List.fromList(outputBytes));
+      final result = await _safeStorage.transactionalSaveBytes(
+        targetPath: outputPath,
+        bytes: Uint8List.fromList(outputBytes),
+      );
+      if (!result.isSuccess) {
+        throw StateError(result.errorMessage ?? 'Burn annotations save failed');
+      }
       return outputPath;
     } finally {
       doc.dispose();
     }
   }
 
-  /// Extracts text from every page of a document for AI summarization & search.
+  /// Extracts text from every page of a document.
   Future<Map<int, String>> extractDocumentText(String sourcePath) async {
     final file = File(sourcePath);
     if (!await file.exists()) return {};
@@ -240,6 +361,26 @@ class SyncfusionPdfService {
         result[i + 1] = pageText.trim();
       }
       return result;
+    } finally {
+      doc.dispose();
+    }
+  }
+
+  /// Extracts text from a specific single page on-demand.
+  Future<String> extractSinglePageText(String sourcePath, int pageNumber) async {
+    final file = File(sourcePath);
+    if (!await file.exists()) return '';
+
+    final bytes = await file.readAsBytes();
+    final doc = sf.PdfDocument(inputBytes: bytes);
+
+    try {
+      final pageIndex = pageNumber - 1;
+      if (pageIndex < 0 || pageIndex >= doc.pages.count) return '';
+      final extractor = sf.PdfTextExtractor(doc);
+      return extractor.extractText(startPageIndex: pageIndex, endPageIndex: pageIndex).trim();
+    } catch (_) {
+      return '';
     } finally {
       doc.dispose();
     }
@@ -267,7 +408,13 @@ class SyncfusionPdfService {
       ]);
 
       final outputBytes = doc.saveSync();
-      await _atomicWrite(outputPath, Uint8List.fromList(outputBytes));
+      final result = await _safeStorage.transactionalSaveBytes(
+        targetPath: outputPath,
+        bytes: Uint8List.fromList(outputBytes),
+      );
+      if (!result.isSuccess) {
+        throw StateError(result.errorMessage ?? 'Password protect save failed');
+      }
       return outputPath;
     } finally {
       doc.dispose();
@@ -275,6 +422,7 @@ class SyncfusionPdfService {
   }
 
   /// Inspects interactive AcroForm fields present in a document.
+  /// Supports TextBoxes, CheckBoxes, RadioButtonLists, ComboBoxes, and ListBoxes.
   Future<List<Map<String, dynamic>>> getFormFields(String sourcePath) async {
     final file = File(sourcePath);
     if (!await file.exists()) return [];
@@ -288,6 +436,7 @@ class SyncfusionPdfService {
         final field = doc.form.fields[i];
         String value = '';
         String typeName = 'text';
+        final List<String> options = [];
 
         if (field is sf.PdfTextBoxField) {
           value = field.text;
@@ -295,12 +444,31 @@ class SyncfusionPdfService {
         } else if (field is sf.PdfCheckBoxField) {
           value = field.isChecked ? 'true' : 'false';
           typeName = 'checkbox';
+        } else if (field is sf.PdfRadioButtonListField) {
+          value = field.selectedValue;
+          typeName = 'radio';
+          for (int r = 0; r < field.items.count; r++) {
+            options.add(field.items[r].value);
+          }
+        } else if (field is sf.PdfComboBoxField) {
+          value = field.selectedValue;
+          typeName = 'combobox';
+          for (int c = 0; c < field.items.count; c++) {
+            options.add(field.items[c].text);
+          }
+        } else if (field is sf.PdfListBoxField) {
+          value = field.selectedValues.join(',');
+          typeName = 'listbox';
+          for (int l = 0; l < field.items.count; l++) {
+            options.add(field.items[l].text);
+          }
         }
 
         fieldList.add({
           'name': field.name ?? 'field_$i',
           'type': typeName,
           'value': value,
+          'options': options,
           'pageIndex': field.page?.defaultLayerIndex ?? 0,
         });
       }
@@ -330,7 +498,14 @@ class SyncfusionPdfService {
           if (field is sf.PdfTextBoxField) {
             field.text = newVal;
           } else if (field is sf.PdfCheckBoxField) {
-            field.isChecked = newVal == 'true';
+            field.isChecked = newVal.toLowerCase() == 'true';
+          } else if (field is sf.PdfRadioButtonListField) {
+            field.selectedValue = newVal;
+          } else if (field is sf.PdfComboBoxField) {
+            field.selectedValue = newVal;
+          } else if (field is sf.PdfListBoxField) {
+            final split = newVal.split(',').map((s) => s.trim()).toList();
+            field.selectedValues = split;
           }
         }
       }
@@ -340,7 +515,13 @@ class SyncfusionPdfService {
       }
 
       final outputBytes = doc.saveSync();
-      await _atomicWrite(outputPath, Uint8List.fromList(outputBytes));
+      final result = await _safeStorage.transactionalSaveBytes(
+        targetPath: outputPath,
+        bytes: Uint8List.fromList(outputBytes),
+      );
+      if (!result.isSuccess) {
+        throw StateError(result.errorMessage ?? 'Form update save failed');
+      }
       return outputPath;
     } finally {
       doc.dispose();
@@ -348,6 +529,7 @@ class SyncfusionPdfService {
   }
 
   /// Extracts hierarchical document bookmarks / Table of Contents tree.
+  /// Resolves both explicit and named destinations to prevent the page-1 fallback bug.
   Future<List<PdfOutlineEntry>> extractBookmarks(String sourcePath) async {
     final file = File(sourcePath);
     if (!await file.exists()) return [];
@@ -361,26 +543,52 @@ class SyncfusionPdfService {
         for (int i = 0; i < collection.count; i++) {
           final bm = collection[i];
           int targetPage = 1;
+          double? destTop;
+          double? destLeft;
+
           final dest = bm.destination;
           if (dest != null) {
             final pageIdx = doc.pages.indexOf(dest.page);
             if (pageIdx >= 0) {
               targetPage = pageIdx + 1;
+              destTop = dest.location.dy;
+              destLeft = dest.location.dx;
             }
           } else if (bm.namedDestination != null) {
-            final destPage = bm.namedDestination!.destination?.page;
-            if (destPage != null) {
-              final pageIdx = doc.pages.indexOf(destPage);
+            final namedDest = bm.namedDestination!;
+            sf.PdfPage? resolvedPage = namedDest.destination?.page;
+
+            // If destination page is null, look up in document namedDestinationCollection
+            if (resolvedPage == null) {
+              for (int n = 0; n < doc.namedDestinationCollection.count; n++) {
+                final entry = doc.namedDestinationCollection[n];
+                if (entry.title == namedDest.title && entry.destination != null) {
+                  resolvedPage = entry.destination!.page;
+                  destTop = entry.destination!.location.dy;
+                  destLeft = entry.destination!.location.dx;
+                  break;
+                }
+              }
+            } else {
+              destTop = namedDest.destination?.location.dy;
+              destLeft = namedDest.destination?.location.dx;
+            }
+
+            if (resolvedPage != null) {
+              final pageIdx = doc.pages.indexOf(resolvedPage);
               if (pageIdx >= 0) {
                 targetPage = pageIdx + 1;
               }
             }
           }
+
           final cleanTitle = bm.title.trim().isNotEmpty ? bm.title.trim() : 'Bookmark ${i + 1}';
           results.add(PdfOutlineEntry(
             title: cleanTitle,
             targetPage: targetPage,
             level: level,
+            destinationTop: destTop,
+            destinationLeft: destLeft,
           ));
           if (bm.count > 0) {
             parseBookmarks(bm, level + 1);
@@ -391,6 +599,7 @@ class SyncfusionPdfService {
       parseBookmarks(doc.bookmarks, 0);
       return results;
     } catch (e) {
+      AppLogger.warn('Error extracting bookmarks via Syncfusion: $e');
       return [];
     } finally {
       doc.dispose();
@@ -398,7 +607,7 @@ class SyncfusionPdfService {
   }
 
   sf.PdfPageRotateAngle _mapRotation(int degrees) {
-    switch (degrees) {
+    switch (degrees % 360) {
       case 90:
         return sf.PdfPageRotateAngle.rotateAngle90;
       case 180:
@@ -408,18 +617,5 @@ class SyncfusionPdfService {
       default:
         return sf.PdfPageRotateAngle.rotateAngle0;
     }
-  }
-
-  Future<void> _atomicWrite(String targetPath, Uint8List bytes) async {
-    final tempPath = '$targetPath.tmp';
-    final tempFile = File(tempPath);
-    await tempFile.writeAsBytes(bytes, flush: true);
-
-    final targetFile = File(targetPath);
-    if (await targetFile.exists()) {
-      await targetFile.delete();
-    }
-    await tempFile.rename(targetPath);
-    AppLogger.info('Atomic write completed: $targetPath (${bytes.length} bytes)');
   }
 }

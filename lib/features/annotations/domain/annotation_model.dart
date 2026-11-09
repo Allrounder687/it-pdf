@@ -20,10 +20,13 @@ enum AnnotationTool {
   pen,
   marker,
   highlighter,
+  underline,
+  strikethrough,
   rectangle,
   circle,
   arrow,
   stickyNote,
+  textCallout,
   eraser,
 }
 
@@ -117,6 +120,7 @@ class Annotation {
   final List<NormalizedPoint> points;
   final NormalizedRect? rect;
   final String? textContent;
+  final bool isCommitted;
   final DateTime createdAt;
 
   const Annotation({
@@ -130,6 +134,7 @@ class Annotation {
     this.points = const [],
     this.rect,
     this.textContent,
+    this.isCommitted = false,
     required this.createdAt,
   });
 
@@ -146,6 +151,7 @@ class Annotation {
     List<NormalizedPoint>? points,
     NormalizedRect? rect,
     String? textContent,
+    bool? isCommitted,
     DateTime? createdAt,
   }) {
     return Annotation(
@@ -159,6 +165,7 @@ class Annotation {
       points: points ?? this.points,
       rect: rect ?? this.rect,
       textContent: textContent ?? this.textContent,
+      isCommitted: isCommitted ?? this.isCommitted,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -175,6 +182,7 @@ class Annotation {
       'points': points.map((p) => p.toMap()).toList(),
       'rect': rect?.toMap(),
       'textContent': textContent,
+      'isCommitted': isCommitted,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -183,19 +191,21 @@ class Annotation {
     return Annotation(
       id: map['id'] as String,
       documentId: map['documentId'] as String,
-      pageNumber: (map['pageNumber'] as num).toInt(),
+      pageNumber: map['pageNumber'] as int,
       type: AnnotationType.values.byName(map['type'] as String),
-      colorValue: (map['colorValue'] as num).toInt(),
+      colorValue: map['colorValue'] as int,
       strokeWidth: (map['strokeWidth'] as num?)?.toDouble() ?? 2.0,
       opacity: (map['opacity'] as num?)?.toDouble() ?? 1.0,
-      points: (map['points'] as List? ?? const [])
-          .map((p) => NormalizedPoint.fromMap(p as Map<String, dynamic>))
-          .toList(),
+      points: (map['points'] as List<dynamic>?)
+              ?.map((p) => NormalizedPoint.fromMap(p as Map<String, dynamic>))
+              .toList() ??
+          const [],
       rect: map['rect'] != null
           ? NormalizedRect.fromMap(map['rect'] as Map<String, dynamic>)
           : null,
       textContent: map['textContent'] as String?,
-      createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
+      isCommitted: map['isCommitted'] as bool? ?? false,
+      createdAt: DateTime.parse(map['createdAt'] as String),
     );
   }
 

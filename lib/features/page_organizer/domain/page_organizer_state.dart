@@ -6,6 +6,8 @@ class PageOrganizerState {
   final String documentId;
   final String documentName;
   final List<PageItem> pages;
+  final List<List<PageItem>> undoStack;
+  final List<List<PageItem>> redoStack;
   final bool isProcessing;
   final String? statusMessage;
   final String? errorMessage;
@@ -16,6 +18,8 @@ class PageOrganizerState {
     required this.documentId,
     required this.documentName,
     this.pages = const [],
+    this.undoStack = const [],
+    this.redoStack = const [],
     this.isProcessing = false,
     this.statusMessage,
     this.errorMessage,
@@ -25,11 +29,16 @@ class PageOrganizerState {
   /// Selected page items.
   List<PageItem> get selectedPages => pages.where((p) => p.isSelected).toList();
 
+  bool get canUndo => undoStack.isNotEmpty;
+  bool get canRedo => redoStack.isNotEmpty;
+
   PageOrganizerState copyWith({
     String? documentPath,
     String? documentId,
     String? documentName,
     List<PageItem>? pages,
+    List<List<PageItem>>? undoStack,
+    List<List<PageItem>>? redoStack,
     bool? isProcessing,
     String? statusMessage,
     String? errorMessage,
@@ -40,6 +49,8 @@ class PageOrganizerState {
       documentId: documentId ?? this.documentId,
       documentName: documentName ?? this.documentName,
       pages: pages ?? this.pages,
+      undoStack: undoStack ?? this.undoStack,
+      redoStack: redoStack ?? this.redoStack,
       isProcessing: isProcessing ?? this.isProcessing,
       statusMessage: statusMessage,
       errorMessage: errorMessage,

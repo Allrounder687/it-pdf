@@ -74,21 +74,102 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
     }
 
     final tool = state.activeTool;
+
+    // Handle eraser
+    if (tool == AnnotationTool.eraser) {
+      _eraseNearbyAnnotations(pageNumber, state.activePoints);
+      state = state.copyWith(isDrawing: false, activePoints: const []);
+      return;
+    }
+
     AnnotationType type;
     double opacity = 1.0;
     double stroke = state.currentStrokeWidth;
+    NormalizedRect? rect;
+    List<NormalizedPoint> points = List.from(state.activePoints);
+
+    final first = points.first;
+    final last = points.last;
 
     switch (tool) {
       case AnnotationTool.highlighter:
         type = AnnotationType.highlight;
         opacity = 0.4;
         stroke = 18.0;
+        // Compute bounding rect across all points so both text markup and ink renderers succeed
+        double minX = first.x, maxX = first.x, minY = first.y, maxY = first.y;
+        for (final p in points) {
+          if (p.x < minX) minX = p.x;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.y > maxY) maxY = p.y;
+        }
+        rect = NormalizedRect(left: minX, top: minY, right: maxX, bottom: maxY);
         break;
+
       case AnnotationTool.marker:
         type = AnnotationType.ink;
         opacity = 0.85;
         stroke = 6.0;
         break;
+
+      case AnnotationTool.arrow:
+        type = AnnotationType.arrow;
+        points = [first, last];
+        stroke = stroke.clamp(1.5, 6.0);
+        break;
+
+      case AnnotationTool.rectangle:
+        type = AnnotationType.rectangle;
+        rect = NormalizedRect(
+          left: first.x < last.x ? first.x : last.x,
+          top: first.y < last.y ? first.y : last.y,
+          right: first.x > last.x ? first.x : last.x,
+          bottom: first.y > last.y ? first.y : last.y,
+        );
+        break;
+
+      case AnnotationTool.circle:
+        type = AnnotationType.circle;
+        rect = NormalizedRect(
+          left: first.x < last.x ? first.x : last.x,
+          top: first.y < last.y ? first.y : last.y,
+          right: first.x > last.x ? first.x : last.x,
+          bottom: first.y > last.y ? first.y : last.y,
+        );
+        break;
+
+      case AnnotationTool.underline:
+        type = AnnotationType.underline;
+        rect = NormalizedRect(
+          left: first.x < last.x ? first.x : last.x,
+          top: first.y < last.y ? first.y : last.y,
+          right: first.x > last.x ? first.x : last.x,
+          bottom: (first.y > last.y ? first.y : last.y) + 0.02,
+        );
+        break;
+
+      case AnnotationTool.strikethrough:
+        type = AnnotationType.strikethrough;
+        rect = NormalizedRect(
+          left: first.x < last.x ? first.x : last.x,
+          top: first.y < last.y ? first.y : last.y,
+          right: first.x > last.x ? first.x : last.x,
+          bottom: (first.y > last.y ? first.y : last.y) + 0.02,
+        );
+        break;
+
+      case AnnotationTool.stickyNote:
+        type = AnnotationType.stickyNote;
+        const noteSize = 0.04;
+        rect = NormalizedRect(
+          left: (last.x - noteSize / 2).clamp(0.0, 1.0 - noteSize),
+          top: (last.y - noteSize / 2).clamp(0.0, 1.0 - noteSize),
+          right: (last.x + noteSize / 2).clamp(noteSize, 1.0),
+          bottom: (last.y + noteSize / 2).clamp(noteSize, 1.0),
+        );
+        break;
+
       case AnnotationTool.pen:
       default:
         type = AnnotationType.ink;
@@ -104,7 +185,9 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
       colorValue: state.currentColor.toARGB32(),
       strokeWidth: stroke,
       opacity: opacity,
-      points: List.from(state.activePoints),
+      points: points,
+      rect: rect,
+      isCommitted: false, // New annotations start as uncommitted drafts
       createdAt: DateTime.now(),
     );
 
@@ -119,6 +202,44 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
     );
 
     await _storage.saveAnnotations(documentId, updated);
+  }
+
+  void _eraseNearbyAnnotations(int pageNumber, List<NormalizedPoint> points) {
+    if (points.isEmpty) return;
+    final pageAnns = state.annotations.where((a) => a.pageNumber == pageNumber).toList();
+    final toDeleteIds = <String>{};
+
+    for (final ann in pageAnns) {
+      if (ann.rect != null) {
+        for (final p in points) {
+          if (p.x >= ann.rect!.left &&
+              p.x <= ann.rect!.right &&
+              p.y >= ann.rect!.top &&
+              p.y <= ann.rect!.bottom) {
+            toDeleteIds.add(ann.id);
+            break;
+          }
+        }
+      } else {
+        for (final p in points) {
+          for (final annPt in ann.points) {
+            final distSq = (p.x - annPt.x) * (p.x - annPt.x) + (p.y - annPt.y) * (p.y - annPt.y);
+            if (distSq < 0.001) {
+              toDeleteIds.add(ann.id);
+              break;
+            }
+          }
+          if (toDeleteIds.contains(ann.id)) break;
+        }
+      }
+    }
+
+    if (toDeleteIds.isNotEmpty) {
+      _pushUndoSnapshot();
+      final updated = state.annotations.where((a) => !toDeleteIds.contains(a.id)).toList();
+      state = state.copyWith(annotations: updated, isDirty: true);
+      _storage.saveAnnotations(documentId, updated);
+    }
   }
 
   /// Add shape or text annotation.
@@ -137,6 +258,7 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
       strokeWidth: state.currentStrokeWidth,
       rect: rect,
       textContent: textContent,
+      isCommitted: false,
       createdAt: DateTime.now(),
     );
 
@@ -196,15 +318,27 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
     await _storage.saveAnnotations(documentId, nextState);
   }
 
-  /// Permanently burns all annotations into the PDF file structure (ISO 32000).
+  /// Permanently burns all draft annotations into the PDF file structure (ISO 32000).
+  /// Once validation succeeds, marks annotations as committed so they are no longer
+  /// rendered in the overlay widget, preventing double-rendering.
   Future<bool> burnAnnotationsToFile(String sourceFilePath, String destinationPath) async {
+    final toBurn = state.draftAnnotations;
+    if (toBurn.isEmpty) {
+      state = state.copyWith(isDirty: false);
+      return true;
+    }
+
     try {
       await _pdfEngine.burnAnnotationsToPdf(
         sourcePath: sourceFilePath,
-        annotations: state.annotations,
+        annotations: toBurn,
         outputPath: destinationPath,
       );
-      state = state.copyWith(isDirty: false);
+
+      // Successfully burned: mark all as committed
+      final updated = state.annotations.map((a) => a.copyWith(isCommitted: true)).toList();
+      state = state.copyWith(annotations: updated, isDirty: false);
+      await _storage.saveAnnotations(documentId, updated);
       return true;
     } catch (e) {
       return false;

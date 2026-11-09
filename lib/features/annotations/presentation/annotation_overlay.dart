@@ -5,6 +5,8 @@ import '../domain/annotation_notifier.dart';
 import 'annotation_painter.dart';
 
 /// Overlay widget placed directly on top of each PDF page in the viewer.
+/// Renders only draft (uncommitted) annotations to prevent double-rendering
+/// over natively rendered burned PDF annotations.
 class AnnotationOverlay extends ConsumerWidget {
   final String documentId;
   final int pageNumber;
@@ -23,7 +25,8 @@ class AnnotationOverlay extends ConsumerWidget {
     final notifier = ref.read(annotationNotifierProvider(documentId).notifier);
     final isToolActive = annotationState.activeTool != AnnotationTool.none;
 
-    final pageAnnotations = annotationState.annotationsForPage(pageNumber);
+    // Render only uncommitted draft annotations
+    final pageAnnotations = annotationState.draftAnnotationsForPage(pageNumber);
 
     return Positioned.fill(
       child: GestureDetector(

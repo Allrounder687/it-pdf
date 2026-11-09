@@ -30,9 +30,19 @@ class AnnotationState {
   bool get canUndo => undoStack.isNotEmpty;
   bool get canRedo => redoStack.isNotEmpty;
 
-  /// Get annotations for a specific page.
+  /// Get all draft (uncommitted) annotations.
+  List<Annotation> get draftAnnotations =>
+      annotations.where((a) => !a.isCommitted).toList();
+
+  /// Get all annotations for a specific page.
   List<Annotation> annotationsForPage(int page) {
     return annotations.where((a) => a.pageNumber == page).toList();
+  }
+
+  /// Get only draft (uncommitted) annotations for a specific page,
+  /// preventing already-burned PDF annotations from double-rendering.
+  List<Annotation> draftAnnotationsForPage(int page) {
+    return annotations.where((a) => a.pageNumber == page && !a.isCommitted).toList();
   }
 
   AnnotationState copyWith({

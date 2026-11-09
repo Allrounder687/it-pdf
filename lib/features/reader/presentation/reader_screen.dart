@@ -18,8 +18,8 @@ import '../../security/presentation/password_protect_dialog.dart';
 import '../domain/reader_notifier.dart';
 import '../domain/reader_state.dart';
 import 'outline_drawer.dart';
+import 'reader_app_bar.dart';
 import 'reader_search_bar.dart';
-import 'reader_view_controls.dart';
 import 'thumbnail_strip.dart';
 
 /// Master PDF Reader Viewport screen powered by PDFium (pdfrx) and Syncfusion PDF Engine.
@@ -36,6 +36,7 @@ class ReaderScreen extends ConsumerStatefulWidget {
 }
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late final PdfViewerController _pdfController;
   PdfTextSearcher? _searcher;
   List<OutlineItem> _outline = [];
@@ -48,7 +49,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     super.initState();
     _pdfController = PdfViewerController();
     _pdfController.addListener(_onControllerMatrixChanged);
-    _loadSyncfusionIntelligence();
   }
 
   void _onControllerMatrixChanged() {
@@ -60,31 +60,45 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
-  Future<void> _loadSyncfusionIntelligence() async {
-    final pdfService = ref.read(syncfusionPdfServiceProvider);
-    try {
-      final texts = await pdfService.extractDocumentText(widget.params.path);
-      if (mounted) {
-        setState(() => _extractedPageTexts = texts);
-      }
-    } catch (_) {}
-  }
-
   Future<void> _onViewerReady(PdfDocument document, PdfViewerController controller) async {
     if (!mounted) return;
     setState(() {
       _searcher = PdfTextSearcher(controller);
     });
 
+    // Ensure initial page is actively positioned and rendered without requiring interaction
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && controller.isReady) {
+        final targetPage = widget.params.initialPage.clamp(1, document.pages.length);
+        if (targetPage > 1) {
+          controller.goToPage(pageNumber: targetPage);
+        } else {
+          final matrix = controller.calcMatrixFitWidthForPage(pageNumber: 1);
+          if (matrix != null) {
+            controller.goTo(matrix);
+          }
+        }
+      }
+    });
+
     try {
+      final pdfService = ref.read(syncfusionPdfServiceProvider);
+      final sfBookmarks = await pdfService.extractBookmarks(widget.params.path);
+      final sfMap = {for (final b in sfBookmarks) b.title.trim().toLowerCase(): b};
+
       final nativeOutline = await document.loadOutline();
       if (nativeOutline.isNotEmpty) {
         final items = <OutlineItem>[];
         void traverse(List<PdfOutlineNode> nodes, int level) {
           for (final n in nodes) {
+            final cleanTitle = n.title.trim();
+            final sfMatch = sfMap[cleanTitle.toLowerCase()];
+            final targetPage = n.dest?.pageNumber ?? sfMatch?.targetPage ?? 1;
             items.add(OutlineItem(
-              title: n.title.trim().isNotEmpty ? n.title.trim() : 'Section',
-              targetPage: n.dest?.pageNumber ?? 1,
+              title: cleanTitle.isNotEmpty ? cleanTitle : 'Section',
+              targetPage: targetPage,
+              destinationTop: sfMatch?.destinationTop,
+              destinationLeft: sfMatch?.destinationLeft,
               dest: n.dest,
               level: level,
             ));
@@ -97,16 +111,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         if (mounted) {
           setState(() => _outline = items);
         }
-      } else {
-        // Fallback to Syncfusion bookmarks
-        final pdfService = ref.read(syncfusionPdfServiceProvider);
-        final sfBookmarks = await pdfService.extractBookmarks(widget.params.path);
-        if (mounted && sfBookmarks.isNotEmpty) {
+      } else if (sfBookmarks.isNotEmpty) {
+        if (mounted) {
           setState(() {
             _outline = sfBookmarks
                 .map((b) => OutlineItem(
                       title: b.title,
                       targetPage: b.targetPage,
+                      destinationTop: b.destinationTop,
+                      destinationLeft: b.destinationLeft,
                       level: b.level,
                     ))
                 .toList();
@@ -173,166 +186,48 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
+            key: _scaffoldKey,
             drawer: OutlineDrawer(
               outline: _outline,
               currentPage: readerState.currentPage,
               onSelect: (entry) => _navigateToOutlineEntry(entry),
             ),
             appBar: readerState.showControls
-                ? AppBar(
-                    title: Text(
-                      readerState.documentName,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    actions: [
-                      // View Scaling & Page Navigation Toolbar
-                      ReaderViewControls(
-                        currentPage: readerState.currentPage,
-                        pageCount: readerState.pageCount,
-                        currentZoom: _currentZoom,
-                        currentLayout: readerState.layout,
-                        onZoomIn: _zoomIn,
-                        onZoomOut: _zoomOut,
-                        onSelectZoom: _setZoom,
-                        onFitWidth: _fitWidth,
-                        onFitPage: _fitPage,
-                        onSelectLayout: (layout) => notifier.setLayout(layout),
-                        onJumpToPage: (page) => _goToPage(page),
-                      ),
-
-                      const VerticalDivider(width: 16, indent: 12, endIndent: 12),
-
-                      // Table of Contents Drawer Trigger
-                      Builder(
-                        builder: (ctx) => IconButton(
-                          icon: const Icon(Icons.bookmarks_outlined),
-                          tooltip: 'Table of Contents',
-                          onPressed: () => Scaffold.of(ctx).openDrawer(),
-                        ),
-                      ),
-
-                      // Grounded AI Assistant Drawer
-                      IconButton(
-                        icon: const Icon(Icons.auto_awesome, color: Colors.blueAccent),
-                        tooltip: 'AI Document Assistant',
-                        onPressed: () => _openAiAssistant(context),
-                      ),
-
-                      // In-document Search Toggle
-                      IconButton(
-                        icon: Icon(
-                          Icons.search,
-                          color: readerState.showSearch ? Colors.blueAccent : null,
-                        ),
-                        tooltip: 'Search (Ctrl+F)',
-                        onPressed: () {
-                          if (_searcher == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Document is still loading... Please wait.'),
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                            return;
-                          }
-                          notifier.toggleSearch();
-                        },
-                      ),
-
-                      // Thumbnail Strip Toggle
-                      IconButton(
-                        icon: Icon(
-                          Icons.view_carousel_outlined,
-                          color: _showThumbnails ? Colors.blueAccent : null,
-                        ),
-                        tooltip: 'Thumbnails',
-                        onPressed: () => setState(() => _showThumbnails = !_showThumbnails),
-                      ),
-
-                      // Reading Theme Toggle
-                      IconButton(
-                        icon: Icon(
-                          readerState.themeMode == ReaderThemeMode.sepia
-                              ? Icons.auto_stories
-                              : (readerState.themeMode == ReaderThemeMode.dark
-                                  ? Icons.dark_mode
-                                  : Icons.light_mode),
-                        ),
-                        tooltip: 'Reading Theme',
-                        onPressed: () => _cycleReadingTheme(readerState, notifier),
-                      ),
-
-                      // Annotation Mode Toggle
-                      IconButton(
-                        icon: Icon(
-                          Icons.edit_note,
-                          color: isToolActive ? Colors.blueAccent : null,
-                        ),
-                        tooltip: 'Annotate',
-                        onPressed: () {
-                          if (isToolActive) {
-                            annNotifier.setActiveTool(AnnotationTool.none);
-                          } else {
-                            annNotifier.setActiveTool(AnnotationTool.pen);
-                          }
-                        },
-                      ),
-
-                      // Save & Burn Annotations to PDF
-                      if (annotationState.annotations.isNotEmpty)
-                        IconButton(
-                          icon: const Icon(Icons.save_outlined, color: Colors.green),
-                          tooltip: 'Burn & Save Annotations (Ctrl+S)',
-                          onPressed: () => _handleBurnAndSave(context, annNotifier),
-                        ),
-
-                      // More Actions: Forms, Security, Page Organizer
-                      PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert),
-                        onSelected: (val) {
-                          if (val == 'organizer') {
-                            _openPageOrganizer(context, readerState);
-                          } else if (val == 'forms') {
-                            _openFormFields(context, pdfService);
-                          } else if (val == 'protect') {
-                            _openPasswordProtect(context, pdfService, filePicker);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'organizer',
-                            child: Row(
-                              children: [
-                                Icon(Icons.dashboard_customize_outlined, size: 18),
-                                SizedBox(width: 8),
-                                Text('Page Organizer'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'forms',
-                            child: Row(
-                              children: [
-                                Icon(Icons.format_shapes, size: 18),
-                                SizedBox(width: 8),
-                                Text('Interactive Forms'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'protect',
-                            child: Row(
-                              children: [
-                                Icon(Icons.lock_outline, size: 18),
-                                SizedBox(width: 8),
-                                Text('Password Protect'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                ? ReaderAppBar(
+                    documentName: readerState.documentName,
+                    currentPage: readerState.currentPage,
+                    pageCount: readerState.pageCount,
+                    currentZoom: _currentZoom,
+                    currentLayout: readerState.layout,
+                    themeMode: readerState.themeMode,
+                    isToolActive: isToolActive,
+                    hasAnnotations: annotationState.annotations.isNotEmpty,
+                    isSearchActive: readerState.showSearch,
+                    isSearchReady: _searcher != null,
+                    showThumbnails: _showThumbnails,
+                    onZoomIn: _zoomIn,
+                    onZoomOut: _zoomOut,
+                    onSelectZoom: _setZoom,
+                    onFitWidth: _fitWidth,
+                    onFitPage: _fitPage,
+                    onSelectLayout: (layout) => notifier.setLayout(layout),
+                    onJumpToPage: (page) => _goToPage(page),
+                    onOpenOutline: () => _scaffoldKey.currentState?.openDrawer(),
+                    onOpenAiAssistant: () => _openAiAssistant(context),
+                    onToggleSearch: () => notifier.toggleSearch(),
+                    onToggleThumbnails: () => setState(() => _showThumbnails = !_showThumbnails),
+                    onCycleTheme: () => _cycleReadingTheme(readerState, notifier),
+                    onToggleAnnotations: () {
+                      if (isToolActive) {
+                        annNotifier.setActiveTool(AnnotationTool.none);
+                      } else {
+                        annNotifier.setActiveTool(AnnotationTool.pen);
+                      }
+                    },
+                    onSaveAnnotations: () => _handleBurnAndSave(context, annNotifier),
+                    onOpenOrganizer: () => _openPageOrganizer(context, readerState),
+                    onOpenForms: () => _openFormFields(context, pdfService),
+                    onOpenProtect: () => _openPasswordProtect(context, pdfService, filePicker),
                   )
                 : null,
             body: Stack(
@@ -343,21 +238,22 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   child: PdfViewer.file(
                     readerState.documentPath,
                     controller: _pdfController,
+                    initialPageNumber: widget.params.initialPage
+                        .clamp(1, widget.params.initialPageCount > 0 ? widget.params.initialPageCount : 1),
                     params: PdfViewerParams(
                       margin: 12.0,
-                      scrollByMouseWheel: 1.0,
+                      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                      boundaryMargin: const EdgeInsets.all(double.infinity),
+                      scrollByMouseWheel: 0.2,
                       scaleByPointerScale: 1.0,
                       enableKeyboardNavigation: true,
                       scrollByArrowKey: 40.0,
-                      sizeDelegateProvider: const PdfViewerSizeDelegateProviderSmart(
-                        smartMaxScale: 1.5,
-                        maxPagesVisible: 2.0,
-                      ),
+                      sizeDelegateProvider: const PdfViewerSizeDelegateProviderLegacy(),
                       interactionDelegateProvider: const PdfViewerScrollInteractionDelegateProviderPhysics(
-                        panFriction: 10.0,
-                        zoomFriction: 10.0,
+                        panFriction: 6.0,
+                        zoomFriction: 6.0,
                       ),
-                      layoutPages: (pages, params) => _calculatePageLayout(pages, params, readerState.layout),
+                      layoutPages: (pages, p) => calculatePageLayout(pages, p, readerState.layout),
                       viewerOverlayBuilder: (context, size, handleLinkTap) => [
                         PdfViewerScrollThumb(
                           controller: _pdfController,
@@ -368,6 +264,39 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       pagePaintCallbacks: [
                         if (_searcher != null) _searcher!.pageTextMatchPaintCallback,
                       ],
+                      loadingBannerBuilder: (context, bytesDownloaded, totalBytes) => Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Loading PDF...',
+                              style: TextStyle(
+                                color: isDark ? Colors.white70 : Colors.black87,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      errorBannerBuilder: (context, error, stackTrace, documentRef) => Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Failed to load PDF document:\n$error',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                       onViewerReady: _onViewerReady,
                       onDocumentChanged: (document) {
                         if (document != null) {
@@ -429,6 +358,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     left: 0,
                     right: 0,
                     child: ThumbnailStrip(
+                      documentPath: readerState.documentPath,
                       pageCount: readerState.pageCount,
                       currentPage: readerState.currentPage,
                       onSelectPage: (p) => _goToPage(p),
@@ -470,20 +400,24 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
-  PdfPageLayout _calculatePageLayout(List<PdfPage> pages, PdfViewerParams params, ReaderLayout layout) {
-    if (layout == ReaderLayout.continuousHorizontal) {
-      final height = pages.fold(0.0, (h, p) => math.max(h, p.height)) + params.margin * 2;
-      final pageLayout = <Rect>[];
-      var x = params.margin;
-      for (var i = 0; i < pages.length; i++) {
-        final page = pages[i];
-        final rect = Rect.fromLTWH(x, (height - page.height) / 2, page.width, page.height);
-        pageLayout.add(rect);
-        x += page.width + params.margin;
-      }
-      return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(x, height));
+  static PdfPageLayout calculatePageLayout(
+    List<PdfPage> pages,
+    PdfViewerParams params,
+    ReaderLayout layout,
+  ) {
+    switch (layout) {
+      case ReaderLayout.continuousVertical:
+        return _verticalPageLayout(pages, params);
+      case ReaderLayout.continuousHorizontal:
+        return _horizontalPageLayout(pages, params);
+      case ReaderLayout.singlePage:
+        return _singlePageLayout(pages, params);
+      case ReaderLayout.twoPage:
+        return _twoPageSpreadLayout(pages, params);
     }
+  }
 
+  static PdfPageLayout _verticalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
     final width = pages.fold(0.0, (w, p) => math.max(w, p.width)) + params.margin * 2;
     final pageLayout = <Rect>[];
     var y = params.margin;
@@ -494,6 +428,82 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       y += page.height + params.margin;
     }
     return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(width, y));
+  }
+
+  static PdfPageLayout _horizontalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
+    final height = pages.fold(0.0, (h, p) => math.max(h, p.height)) + params.margin * 2;
+    final pageLayout = <Rect>[];
+    var x = params.margin;
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final rect = Rect.fromLTWH(x, (height - page.height) / 2, page.width, page.height);
+      pageLayout.add(rect);
+      x += page.width + params.margin;
+    }
+    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(x, height));
+  }
+
+  static PdfPageLayout _singlePageLayout(List<PdfPage> pages, PdfViewerParams params) {
+    if (pages.isEmpty) {
+      return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
+    }
+    final maxWidth = pages.fold(0.0, (w, p) => math.max(w, p.width));
+    final maxHeight = pages.fold(0.0, (h, p) => math.max(h, p.height));
+    final slotWidth = maxWidth + params.margin * 2;
+    final slotHeight = maxHeight + params.margin * 2;
+    final pageLayout = <Rect>[];
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final x = i * slotWidth + (slotWidth - page.width) / 2;
+      final y = (slotHeight - page.height) / 2;
+      pageLayout.add(Rect.fromLTWH(x, y, page.width, page.height));
+    }
+    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(pages.length * slotWidth, slotHeight));
+  }
+
+  static PdfPageLayout _twoPageSpreadLayout(List<PdfPage> pages, PdfViewerParams params) {
+    if (pages.isEmpty) {
+      return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
+    }
+    final maxPageWidth = pages.fold(0.0, (w, p) => math.max(w, p.width));
+    final spreadWidth = (maxPageWidth * 2) + (params.margin * 3);
+    final pageLayout = List<Rect>.filled(pages.length, Rect.zero);
+
+    // Page 1 is the cover page: centered horizontally in the spread width
+    var y = params.margin;
+    final cover = pages[0];
+    pageLayout[0] = Rect.fromLTWH(
+      (spreadWidth - cover.width) / 2,
+      y,
+      cover.width,
+      cover.height,
+    );
+    y += cover.height + params.margin;
+
+    // Remaining pages are paired side-by-side (Facing pages: Page 2 & 3, Page 4 & 5, ...)
+    for (var i = 1; i < pages.length; i += 2) {
+      final leftPage = pages[i];
+      if (i + 1 < pages.length) {
+        final rightPage = pages[i + 1];
+        final rowHeight = math.max(leftPage.height, rightPage.height);
+        final leftX = params.margin + (maxPageWidth - leftPage.width);
+        final leftY = y + (rowHeight - leftPage.height) / 2;
+        pageLayout[i] = Rect.fromLTWH(leftX, leftY, leftPage.width, leftPage.height);
+
+        final rightX = params.margin * 2 + maxPageWidth;
+        final rightY = y + (rowHeight - rightPage.height) / 2;
+        pageLayout[i + 1] = Rect.fromLTWH(rightX, rightY, rightPage.width, rightPage.height);
+
+        y += rowHeight + params.margin;
+      } else {
+        // Trailing lone page: centered
+        final leftX = (spreadWidth - leftPage.width) / 2;
+        pageLayout[i] = Rect.fromLTWH(leftX, y, leftPage.width, leftPage.height);
+        y += leftPage.height + params.margin;
+      }
+    }
+
+    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(spreadWidth, y));
   }
 
   void _goToPage(int page) {
@@ -509,7 +519,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       jumped = await _pdfController.goToDest(entry.dest);
     }
     if (!jumped && entry.targetPage > 0) {
-      await _pdfController.goToPage(pageNumber: entry.targetPage);
+      if (entry.destinationTop != null &&
+          entry.targetPage <= _pdfController.document.pages.length) {
+        final page = _pdfController.document.pages[entry.targetPage - 1];
+        final top = entry.destinationTop!.clamp(0.0, page.height);
+        final bottom = math.max(0.0, top - 60.0);
+        final left = (entry.destinationLeft ?? 0.0).clamp(0.0, page.width);
+        final right = math.min(left + 120.0, page.width);
+        await _pdfController.goToRectInsidePage(
+          pageNumber: entry.targetPage,
+          rect: PdfRect(left, top, right, bottom),
+        );
+      } else {
+        await _pdfController.goToPage(pageNumber: entry.targetPage);
+      }
     }
   }
 
@@ -564,7 +587,23 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
-  void _openAiAssistant(BuildContext context) {
+  Future<void> _openAiAssistant(BuildContext context) async {
+    if (_extractedPageTexts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Extracting document text for AI analysis...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      final pdfService = ref.read(syncfusionPdfServiceProvider);
+      try {
+        final texts = await pdfService.extractDocumentText(widget.params.path);
+        if (mounted) {
+          setState(() => _extractedPageTexts = texts);
+        }
+      } catch (_) {}
+    }
+    if (!context.mounted) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

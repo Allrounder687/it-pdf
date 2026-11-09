@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'platform/file_picker_service.dart';
 import 'storage/preferences_service.dart';
+import 'storage/safe_document_storage.dart';
 
 /// Provider for global SharedPreferences instance.
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
@@ -18,3 +19,9 @@ final preferencesServiceProvider = Provider<PreferencesService>((ref) {
 final filePickerServiceProvider = Provider<FilePickerService>((ref) {
   return FilePickerService();
 });
+
+/// Provider for SafeDocumentStorage.
+final safeDocumentStorageProvider = Provider<SafeDocumentStorage>((ref) {
+  return SafeDocumentStorage();
+});
+

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/pdf_engine/syncfusion_pdf_service.dart';
 
 /// Interactive AcroForm Inspector and Editor modal dialog.
+/// Supports TextBoxes, CheckBoxes, RadioButtonLists, Dropdowns, and ListBoxes.
 class FormFieldsDialog extends StatefulWidget {
   final String documentPath;
   final SyncfusionPdfService pdfService;
@@ -21,6 +22,7 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
   List<Map<String, dynamic>> _fields = [];
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, bool> _checkboxValues = {};
+  final Map<String, String> _dropdownValues = {};
   bool _flattenForm = false;
 
   @override
@@ -37,7 +39,9 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
       final val = f['value'] as String;
 
       if (type == 'checkbox') {
-        _checkboxValues[name] = val == 'true';
+        _checkboxValues[name] = val.toLowerCase() == 'true';
+      } else if (type == 'combobox' || type == 'radio') {
+        _dropdownValues[name] = val;
       } else {
         _controllers[name] = TextEditingController(text: val);
       }
@@ -66,6 +70,9 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
     }
     for (final entry in _checkboxValues.entries) {
       values[entry.key] = entry.value.toString();
+    }
+    for (final entry in _dropdownValues.entries) {
+      values[entry.key] = entry.value;
     }
 
     setState(() => _isLoading = true);
@@ -135,6 +142,7 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
                       final f = _fields[index];
                       final name = f['name'] as String;
                       final type = f['type'] as String;
+                      final options = (f['options'] as List<dynamic>?)?.cast<String>() ?? [];
 
                       if (type == 'checkbox') {
                         return CheckboxListTile(
@@ -142,6 +150,26 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
                           value: _checkboxValues[name] ?? false,
                           onChanged: (val) {
                             setState(() => _checkboxValues[name] = val ?? false);
+                          },
+                        );
+                      }
+
+                      if ((type == 'combobox' || type == 'radio') && options.isNotEmpty) {
+                        final currentVal = _dropdownValues[name] ?? (options.isNotEmpty ? options.first : '');
+                        return DropdownButtonFormField<String>(
+                          decoration: InputDecoration(
+                            labelText: name,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          value: options.contains(currentVal) ? currentVal : options.first,
+                          items: options.map((opt) {
+                            return DropdownMenuItem(value: opt, child: Text(opt));
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _dropdownValues[name] = val);
+                            }
                           },
                         );
                       }
@@ -161,7 +189,7 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Flatten Form on Save'),
-                subtitle: const Text('Permanently embeds field data into the document'),
+                subtitle: const Text('Permanently embeds field data into the document (ISO 32000)'),
                 value: _flattenForm,
                 onChanged: (val) => setState(() => _flattenForm = val),
               ),
