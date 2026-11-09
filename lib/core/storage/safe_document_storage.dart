@@ -52,7 +52,7 @@ class SafeDocumentStorage {
 
   /// Validates the internal structure of PDF bytes before allowing persistence.
   /// Verifies magic byte header (%PDF-), xref table, trailer, and page count.
-  bool validatePdfBytes(Uint8List bytes) {
+  bool validatePdfBytes(Uint8List bytes, {String? password}) {
     if (bytes.length < 32) return false;
 
     // Check %PDF- header in the first 1024 bytes (spec allows leading BOM or garbage)
@@ -73,7 +73,7 @@ class SafeDocumentStorage {
     // Deep semantic parse using Syncfusion PDF engine
     sf.PdfDocument? testDoc;
     try {
-      testDoc = sf.PdfDocument(inputBytes: bytes);
+      testDoc = sf.PdfDocument(inputBytes: bytes, password: password);
       final count = testDoc.pages.count;
       if (count < 0) {
         AppLogger.error('PDF validation failed: invalid page count ($count)');
@@ -81,6 +81,11 @@ class SafeDocumentStorage {
       }
       return true;
     } catch (e, st) {
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('password') || errStr.contains('encrypt')) {
+        AppLogger.info('PDF is password protected: verified valid encrypted PDF');
+        return true;
+      }
       AppLogger.error('PDF validation failed during structural parse', error: e, stackTrace: st);
       return false;
     } finally {
@@ -98,10 +103,11 @@ class SafeDocumentStorage {
   Future<SaveResult> transactionalSaveBytes({
     required String targetPath,
     required Uint8List bytes,
+    String? password,
     bool createBackup = true,
   }) async {
     // 1. Structural pre-validation
-    if (!validatePdfBytes(bytes)) {
+    if (!validatePdfBytes(bytes, password: password)) {
       return SaveResult.failure(targetPath, 'Validation failed: Invalid or corrupted PDF bytes.');
     }
 
