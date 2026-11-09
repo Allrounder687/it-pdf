@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +19,7 @@ import '../domain/reader_notifier.dart';
 import '../domain/reader_state.dart';
 import 'outline_drawer.dart';
 import 'reader_search_bar.dart';
+import 'reader_view_controls.dart';
 import 'thumbnail_strip.dart';
 
 /// Master PDF Reader Viewport screen powered by PDFium (pdfrx) and Syncfusion PDF Engine.
@@ -35,36 +37,89 @@ class ReaderScreen extends ConsumerStatefulWidget {
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   late final PdfViewerController _pdfController;
-  late final PdfTextSearcher _searcher;
-  List<PdfOutlineEntry> _outline = [];
+  PdfTextSearcher? _searcher;
+  List<OutlineItem> _outline = [];
   Map<int, String> _extractedPageTexts = {};
   bool _showThumbnails = false;
+  double _currentZoom = 1.0;
 
   @override
   void initState() {
     super.initState();
     _pdfController = PdfViewerController();
-    _searcher = PdfTextSearcher(_pdfController);
-    _loadDocumentIntelligence();
+    _pdfController.addListener(_onControllerMatrixChanged);
+    _loadSyncfusionIntelligence();
   }
 
-  Future<void> _loadDocumentIntelligence() async {
+  void _onControllerMatrixChanged() {
+    if (mounted && _pdfController.isReady) {
+      final zoom = _pdfController.currentZoom;
+      if ((zoom - _currentZoom).abs() > 0.01) {
+        setState(() => _currentZoom = zoom);
+      }
+    }
+  }
+
+  Future<void> _loadSyncfusionIntelligence() async {
     final pdfService = ref.read(syncfusionPdfServiceProvider);
     try {
-      final bookmarks = await pdfService.extractBookmarks(widget.params.path);
       final texts = await pdfService.extractDocumentText(widget.params.path);
       if (mounted) {
-        setState(() {
-          _outline = bookmarks;
-          _extractedPageTexts = texts;
-        });
+        setState(() => _extractedPageTexts = texts);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _onViewerReady(PdfDocument document, PdfViewerController controller) async {
+    if (!mounted) return;
+    setState(() {
+      _searcher = PdfTextSearcher(controller);
+    });
+
+    try {
+      final nativeOutline = await document.loadOutline();
+      if (nativeOutline.isNotEmpty) {
+        final items = <OutlineItem>[];
+        void traverse(List<PdfOutlineNode> nodes, int level) {
+          for (final n in nodes) {
+            items.add(OutlineItem(
+              title: n.title.trim().isNotEmpty ? n.title.trim() : 'Section',
+              targetPage: n.dest?.pageNumber ?? 1,
+              dest: n.dest,
+              level: level,
+            ));
+            if (n.children.isNotEmpty) {
+              traverse(n.children, level + 1);
+            }
+          }
+        }
+        traverse(nativeOutline, 0);
+        if (mounted) {
+          setState(() => _outline = items);
+        }
+      } else {
+        // Fallback to Syncfusion bookmarks
+        final pdfService = ref.read(syncfusionPdfServiceProvider);
+        final sfBookmarks = await pdfService.extractBookmarks(widget.params.path);
+        if (mounted && sfBookmarks.isNotEmpty) {
+          setState(() {
+            _outline = sfBookmarks
+                .map((b) => OutlineItem(
+                      title: b.title,
+                      targetPage: b.targetPage,
+                      level: b.level,
+                    ))
+                .toList();
+          });
+        }
       }
     } catch (_) {}
   }
 
   @override
   void dispose() {
-    _searcher.dispose();
+    _pdfController.removeListener(_onControllerMatrixChanged);
+    _searcher?.dispose();
     super.dispose();
   }
 
@@ -86,15 +141,28 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true): const _SearchIntent(),
         const SingleActivator(LogicalKeyboardKey.keyZ, control: true): const _UndoIntent(),
         const SingleActivator(LogicalKeyboardKey.keyY, control: true): const _RedoIntent(),
+        const SingleActivator(LogicalKeyboardKey.equal, control: true): const _ZoomInIntent(),
+        const SingleActivator(LogicalKeyboardKey.minus, control: true): const _ZoomOutIntent(),
+        const SingleActivator(LogicalKeyboardKey.digit0, control: true): const _ZoomResetIntent(),
         const SingleActivator(LogicalKeyboardKey.arrowLeft): const _PrevPageIntent(),
         const SingleActivator(LogicalKeyboardKey.arrowRight): const _NextPageIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
           _SaveIntent: CallbackAction<_SaveIntent>(onInvoke: (_) => _handleBurnAndSave(context, annNotifier)),
-          _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (_) => notifier.toggleSearch()),
+          _SearchIntent: CallbackAction<_SearchIntent>(
+            onInvoke: (_) {
+              if (_searcher != null) {
+                notifier.toggleSearch();
+              }
+              return null;
+            },
+          ),
           _UndoIntent: CallbackAction<_UndoIntent>(onInvoke: (_) => annNotifier.undo()),
           _RedoIntent: CallbackAction<_RedoIntent>(onInvoke: (_) => annNotifier.redo()),
+          _ZoomInIntent: CallbackAction<_ZoomInIntent>(onInvoke: (_) => _zoomIn()),
+          _ZoomOutIntent: CallbackAction<_ZoomOutIntent>(onInvoke: (_) => _zoomOut()),
+          _ZoomResetIntent: CallbackAction<_ZoomResetIntent>(onInvoke: (_) => _setZoom(1.0)),
           _PrevPageIntent: CallbackAction<_PrevPageIntent>(
             onInvoke: (_) => _goToPage((readerState.currentPage - 1).clamp(1, readerState.pageCount)),
           ),
@@ -107,17 +175,35 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           child: Scaffold(
             drawer: OutlineDrawer(
               outline: _outline,
-              onSelectPage: (p) => _goToPage(p),
+              currentPage: readerState.currentPage,
+              onSelect: (entry) => _navigateToOutlineEntry(entry),
             ),
             appBar: readerState.showControls
                 ? AppBar(
                     title: Text(
                       readerState.documentName,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                       overflow: TextOverflow.ellipsis,
                     ),
                     actions: [
-                      // Table of Contents / Outline Drawer Trigger
+                      // View Scaling & Page Navigation Toolbar
+                      ReaderViewControls(
+                        currentPage: readerState.currentPage,
+                        pageCount: readerState.pageCount,
+                        currentZoom: _currentZoom,
+                        currentLayout: readerState.layout,
+                        onZoomIn: _zoomIn,
+                        onZoomOut: _zoomOut,
+                        onSelectZoom: _setZoom,
+                        onFitWidth: _fitWidth,
+                        onFitPage: _fitPage,
+                        onSelectLayout: (layout) => notifier.setLayout(layout),
+                        onJumpToPage: (page) => _goToPage(page),
+                      ),
+
+                      const VerticalDivider(width: 16, indent: 12, endIndent: 12),
+
+                      // Table of Contents Drawer Trigger
                       Builder(
                         builder: (ctx) => IconButton(
                           icon: const Icon(Icons.bookmarks_outlined),
@@ -140,7 +226,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           color: readerState.showSearch ? Colors.blueAccent : null,
                         ),
                         tooltip: 'Search (Ctrl+F)',
-                        onPressed: () => notifier.toggleSearch(),
+                        onPressed: () {
+                          if (_searcher == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Document is still loading... Please wait.'),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                            return;
+                          }
+                          notifier.toggleSearch();
+                        },
                       ),
 
                       // Thumbnail Strip Toggle
@@ -240,52 +337,76 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 : null,
             body: Stack(
               children: [
-                // Main PDFium Viewport
-                GestureDetector(
-                  onTap: () {
-                    if (!isToolActive) {
-                      notifier.toggleControls();
-                    }
-                  },
-                  child: _applyReadingFilter(
-                    themeMode: readerState.themeMode,
-                    child: PdfViewer.file(
-                      readerState.documentPath,
-                      controller: _pdfController,
-                      params: PdfViewerParams(
-                        pagePaintCallbacks: [_searcher.pageTextMatchPaintCallback],
-                        onDocumentChanged: (document) {
-                          if (document != null) {
-                            notifier.setPageCount(document.pages.length);
-                          }
-                        },
-                        onPageChanged: (page) {
-                          if (page != null) {
-                            notifier.setPage(page);
-                          }
-                        },
-                        pageOverlaysBuilder: (context, pageRect, page) {
-                          return [
-                            AnnotationOverlay(
-                              documentId: widget.params.id,
-                              pageNumber: page.pageNumber,
-                              pageSize: Size(pageRect.width, pageRect.height),
-                            ),
-                          ];
-                        },
+                // Main PDFium Viewport (Native scroll and wheel handling)
+                _applyReadingFilter(
+                  themeMode: readerState.themeMode,
+                  child: PdfViewer.file(
+                    readerState.documentPath,
+                    controller: _pdfController,
+                    params: PdfViewerParams(
+                      margin: 12.0,
+                      scrollByMouseWheel: 1.0,
+                      scaleByPointerScale: 1.0,
+                      enableKeyboardNavigation: true,
+                      scrollByArrowKey: 40.0,
+                      sizeDelegateProvider: const PdfViewerSizeDelegateProviderSmart(
+                        smartMaxScale: 1.5,
+                        maxPagesVisible: 2.0,
                       ),
+                      interactionDelegateProvider: const PdfViewerScrollInteractionDelegateProviderPhysics(
+                        panFriction: 10.0,
+                        zoomFriction: 10.0,
+                      ),
+                      layoutPages: (pages, params) => _calculatePageLayout(pages, params, readerState.layout),
+                      viewerOverlayBuilder: (context, size, handleLinkTap) => [
+                        PdfViewerScrollThumb(
+                          controller: _pdfController,
+                          orientation: ScrollbarOrientation.right,
+                          thumbSize: const Size(20, 48),
+                        ),
+                      ],
+                      pagePaintCallbacks: [
+                        if (_searcher != null) _searcher!.pageTextMatchPaintCallback,
+                      ],
+                      onViewerReady: _onViewerReady,
+                      onDocumentChanged: (document) {
+                        if (document != null) {
+                          notifier.setPageCount(document.pages.length);
+                        }
+                      },
+                      onPageChanged: (page) {
+                        if (page != null) {
+                          notifier.setPage(page);
+                        }
+                      },
+                      onGeneralTap: (context, controller, details) {
+                        if (details.type == PdfViewerGeneralTapType.tap && !isToolActive) {
+                          notifier.toggleControls();
+                          return true;
+                        }
+                        return false;
+                      },
+                      pageOverlaysBuilder: (context, pageRect, page) {
+                        return [
+                          AnnotationOverlay(
+                            documentId: widget.params.id,
+                            pageNumber: page.pageNumber,
+                            pageSize: Size(pageRect.width, pageRect.height),
+                          ),
+                        ];
+                      },
                     ),
                   ),
                 ),
 
                 // Live In-Document Search Overlay Bar
-                if (readerState.showSearch)
+                if (readerState.showSearch && _searcher != null)
                   Positioned(
                     top: 12,
                     left: 16,
                     right: 16,
                     child: ReaderSearchBar(
-                      searcher: _searcher,
+                      searcher: _searcher!,
                       onClose: () => notifier.toggleSearch(),
                     ),
                   ),
@@ -327,11 +448,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                         color: isDark
                             ? const Color(0xFF1E293B)
                             : Colors.white.withValues(alpha: 0.95),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Text(
-                            'Page ${readerState.currentPage} of ${readerState.pageCount}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => _goToPage(readerState.currentPage),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: Text(
+                              'Page ${readerState.currentPage} of ${readerState.pageCount}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
                           ),
                         ),
                       ),
@@ -345,10 +470,80 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
+  PdfPageLayout _calculatePageLayout(List<PdfPage> pages, PdfViewerParams params, ReaderLayout layout) {
+    if (layout == ReaderLayout.continuousHorizontal) {
+      final height = pages.fold(0.0, (h, p) => math.max(h, p.height)) + params.margin * 2;
+      final pageLayout = <Rect>[];
+      var x = params.margin;
+      for (var i = 0; i < pages.length; i++) {
+        final page = pages[i];
+        final rect = Rect.fromLTWH(x, (height - page.height) / 2, page.width, page.height);
+        pageLayout.add(rect);
+        x += page.width + params.margin;
+      }
+      return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(x, height));
+    }
+
+    final width = pages.fold(0.0, (w, p) => math.max(w, p.width)) + params.margin * 2;
+    final pageLayout = <Rect>[];
+    var y = params.margin;
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final rect = Rect.fromLTWH((width - page.width) / 2, y, page.width, page.height);
+      pageLayout.add(rect);
+      y += page.height + params.margin;
+    }
+    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(width, y));
+  }
+
   void _goToPage(int page) {
     if (_pdfController.isReady) {
       _pdfController.goToPage(pageNumber: page);
     }
+  }
+
+  Future<void> _navigateToOutlineEntry(OutlineItem entry) async {
+    if (!_pdfController.isReady) return;
+    bool jumped = false;
+    if (entry.dest != null) {
+      jumped = await _pdfController.goToDest(entry.dest);
+    }
+    if (!jumped && entry.targetPage > 0) {
+      await _pdfController.goToPage(pageNumber: entry.targetPage);
+    }
+  }
+
+  void _fitWidth() {
+    if (!_pdfController.isReady) return;
+    final pageNumber = _pdfController.pageNumber ?? 1;
+    final matrix = _pdfController.calcMatrixFitWidthForPage(pageNumber: pageNumber);
+    if (matrix != null) {
+      _pdfController.goTo(matrix);
+    }
+  }
+
+  void _fitPage() {
+    if (!_pdfController.isReady) return;
+    final pageNumber = _pdfController.pageNumber ?? 1;
+    final matrix = _pdfController.calcMatrixForFit(pageNumber: pageNumber);
+    if (matrix != null) {
+      _pdfController.goTo(matrix);
+    }
+  }
+
+  void _zoomIn() {
+    if (!_pdfController.isReady) return;
+    _pdfController.zoomUp();
+  }
+
+  void _zoomOut() {
+    if (!_pdfController.isReady) return;
+    _pdfController.zoomDown();
+  }
+
+  void _setZoom(double zoom) {
+    if (!_pdfController.isReady) return;
+    _pdfController.setZoom(_pdfController.centerPosition, zoom);
   }
 
   Future<void> _handleBurnAndSave(BuildContext context, AnnotationNotifier annNotifier) async {
@@ -486,6 +681,18 @@ class _UndoIntent extends Intent {
 
 class _RedoIntent extends Intent {
   const _RedoIntent();
+}
+
+class _ZoomInIntent extends Intent {
+  const _ZoomInIntent();
+}
+
+class _ZoomOutIntent extends Intent {
+  const _ZoomOutIntent();
+}
+
+class _ZoomResetIntent extends Intent {
+  const _ZoomResetIntent();
 }
 
 class _PrevPageIntent extends Intent {

@@ -367,9 +367,18 @@ class SyncfusionPdfService {
             if (pageIdx >= 0) {
               targetPage = pageIdx + 1;
             }
+          } else if (bm.namedDestination != null) {
+            final destPage = bm.namedDestination!.destination?.page;
+            if (destPage != null) {
+              final pageIdx = doc.pages.indexOf(destPage);
+              if (pageIdx >= 0) {
+                targetPage = pageIdx + 1;
+              }
+            }
           }
+          final cleanTitle = bm.title.trim().isNotEmpty ? bm.title.trim() : 'Bookmark ${i + 1}';
           results.add(PdfOutlineEntry(
-            title: bm.title,
+            title: cleanTitle,
             targetPage: targetPage,
             level: level,
           ));
