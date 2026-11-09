@@ -242,7 +242,7 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
       PdfThumbnailCache.instance.invalidateDocument(state.documentPath);
 
       // Update library progress
-      ref.read(libraryNotifierProvider.notifier).updateReadingProgress(
+      await ref.read(libraryNotifierProvider.notifier).updateReadingProgress(
             state.documentId,
             1,
             state.pages.length,
