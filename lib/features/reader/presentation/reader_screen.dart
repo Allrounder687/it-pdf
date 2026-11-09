@@ -33,6 +33,112 @@ class ReaderScreen extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<ReaderScreen> createState() => _ReaderScreenState();
+
+  static PdfPageLayout calculatePageLayout(
+    List<PdfPage> pages,
+    PdfViewerParams params,
+    ReaderLayout layout,
+  ) {
+    switch (layout) {
+      case ReaderLayout.continuousVertical:
+        return _verticalPageLayout(pages, params);
+      case ReaderLayout.continuousHorizontal:
+        return _horizontalPageLayout(pages, params);
+      case ReaderLayout.singlePage:
+        return _singlePageLayout(pages, params);
+      case ReaderLayout.twoPage:
+        return _twoPageSpreadLayout(pages, params);
+    }
+  }
+
+  static PdfPageLayout _verticalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
+    final width = pages.fold(0.0, (w, p) => math.max(w, p.width)) + params.margin * 2;
+    final pageLayout = <Rect>[];
+    var y = params.margin;
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final rect = Rect.fromLTWH((width - page.width) / 2, y, page.width, page.height);
+      pageLayout.add(rect);
+      y += page.height + params.margin;
+    }
+    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(width, y));
+  }
+
+  static PdfPageLayout _horizontalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
+    final height = pages.fold(0.0, (h, p) => math.max(h, p.height)) + params.margin * 2;
+    final pageLayout = <Rect>[];
+    var x = params.margin;
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final rect = Rect.fromLTWH(x, (height - page.height) / 2, page.width, page.height);
+      pageLayout.add(rect);
+      x += page.width + params.margin;
+    }
+    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(x, height));
+  }
+
+  static PdfPageLayout _singlePageLayout(List<PdfPage> pages, PdfViewerParams params) {
+    if (pages.isEmpty) {
+      return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
+    }
+    final maxWidth = pages.fold(0.0, (w, p) => math.max(w, p.width));
+    final maxHeight = pages.fold(0.0, (h, p) => math.max(h, p.height));
+    final slotWidth = maxWidth + params.margin * 2;
+    final slotHeight = maxHeight + params.margin * 2;
+    final pageLayout = <Rect>[];
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final x = i * slotWidth + (slotWidth - page.width) / 2;
+      final y = (slotHeight - page.height) / 2;
+      pageLayout.add(Rect.fromLTWH(x, y, page.width, page.height));
+    }
+    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(pages.length * slotWidth, slotHeight));
+  }
+
+  static PdfPageLayout _twoPageSpreadLayout(List<PdfPage> pages, PdfViewerParams params) {
+    if (pages.isEmpty) {
+      return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
+    }
+    final maxPageWidth = pages.fold(0.0, (w, p) => math.max(w, p.width));
+    final spreadWidth = (maxPageWidth * 2) + (params.margin * 3);
+    final pageLayout = List<Rect>.filled(pages.length, Rect.zero);
+
+    // Page 1 is the cover page: centered horizontally in the spread width
+    var y = params.margin;
+    final cover = pages[0];
+    pageLayout[0] = Rect.fromLTWH(
+      (spreadWidth - cover.width) / 2,
+      y,
+      cover.width,
+      cover.height,
+    );
+    y += cover.height + params.margin;
+
+    // Remaining pages are paired side-by-side (Facing pages: Page 2 & 3, Page 4 & 5, ...)
+    for (var i = 1; i < pages.length; i += 2) {
+      final leftPage = pages[i];
+      if (i + 1 < pages.length) {
+        final rightPage = pages[i + 1];
+        final rowHeight = math.max(leftPage.height, rightPage.height);
+        final leftX = params.margin + (maxPageWidth - leftPage.width);
+        final leftY = y + (rowHeight - leftPage.height) / 2;
+        pageLayout[i] = Rect.fromLTWH(leftX, leftY, leftPage.width, leftPage.height);
+
+        final rightX = params.margin * 2 + maxPageWidth;
+        final rightY = y + (rowHeight - rightPage.height) / 2;
+        pageLayout[i + 1] = Rect.fromLTWH(rightX, rightY, rightPage.width, rightPage.height);
+
+        y += rowHeight + params.margin;
+      } else {
+        // Trailing lone page: centered
+        final leftX = (spreadWidth - leftPage.width) / 2;
+        pageLayout[i] = Rect.fromLTWH(leftX, y, leftPage.width, leftPage.height);
+        y += leftPage.height + params.margin;
+      }
+    }
+
+    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(spreadWidth, y));
+  }
 }
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
@@ -253,7 +359,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                         panFriction: 6.0,
                         zoomFriction: 6.0,
                       ),
-                      layoutPages: (pages, p) => calculatePageLayout(pages, p, readerState.layout),
+                      layoutPages: (pages, p) => ReaderScreen.calculatePageLayout(pages, p, readerState.layout),
                       viewerOverlayBuilder: (context, size, handleLinkTap) => [
                         PdfViewerScrollThumb(
                           controller: _pdfController,
@@ -400,112 +506,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
-  static PdfPageLayout calculatePageLayout(
-    List<PdfPage> pages,
-    PdfViewerParams params,
-    ReaderLayout layout,
-  ) {
-    switch (layout) {
-      case ReaderLayout.continuousVertical:
-        return _verticalPageLayout(pages, params);
-      case ReaderLayout.continuousHorizontal:
-        return _horizontalPageLayout(pages, params);
-      case ReaderLayout.singlePage:
-        return _singlePageLayout(pages, params);
-      case ReaderLayout.twoPage:
-        return _twoPageSpreadLayout(pages, params);
-    }
-  }
-
-  static PdfPageLayout _verticalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
-    final width = pages.fold(0.0, (w, p) => math.max(w, p.width)) + params.margin * 2;
-    final pageLayout = <Rect>[];
-    var y = params.margin;
-    for (var i = 0; i < pages.length; i++) {
-      final page = pages[i];
-      final rect = Rect.fromLTWH((width - page.width) / 2, y, page.width, page.height);
-      pageLayout.add(rect);
-      y += page.height + params.margin;
-    }
-    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(width, y));
-  }
-
-  static PdfPageLayout _horizontalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
-    final height = pages.fold(0.0, (h, p) => math.max(h, p.height)) + params.margin * 2;
-    final pageLayout = <Rect>[];
-    var x = params.margin;
-    for (var i = 0; i < pages.length; i++) {
-      final page = pages[i];
-      final rect = Rect.fromLTWH(x, (height - page.height) / 2, page.width, page.height);
-      pageLayout.add(rect);
-      x += page.width + params.margin;
-    }
-    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(x, height));
-  }
-
-  static PdfPageLayout _singlePageLayout(List<PdfPage> pages, PdfViewerParams params) {
-    if (pages.isEmpty) {
-      return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
-    }
-    final maxWidth = pages.fold(0.0, (w, p) => math.max(w, p.width));
-    final maxHeight = pages.fold(0.0, (h, p) => math.max(h, p.height));
-    final slotWidth = maxWidth + params.margin * 2;
-    final slotHeight = maxHeight + params.margin * 2;
-    final pageLayout = <Rect>[];
-    for (var i = 0; i < pages.length; i++) {
-      final page = pages[i];
-      final x = i * slotWidth + (slotWidth - page.width) / 2;
-      final y = (slotHeight - page.height) / 2;
-      pageLayout.add(Rect.fromLTWH(x, y, page.width, page.height));
-    }
-    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(pages.length * slotWidth, slotHeight));
-  }
-
-  static PdfPageLayout _twoPageSpreadLayout(List<PdfPage> pages, PdfViewerParams params) {
-    if (pages.isEmpty) {
-      return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
-    }
-    final maxPageWidth = pages.fold(0.0, (w, p) => math.max(w, p.width));
-    final spreadWidth = (maxPageWidth * 2) + (params.margin * 3);
-    final pageLayout = List<Rect>.filled(pages.length, Rect.zero);
-
-    // Page 1 is the cover page: centered horizontally in the spread width
-    var y = params.margin;
-    final cover = pages[0];
-    pageLayout[0] = Rect.fromLTWH(
-      (spreadWidth - cover.width) / 2,
-      y,
-      cover.width,
-      cover.height,
-    );
-    y += cover.height + params.margin;
-
-    // Remaining pages are paired side-by-side (Facing pages: Page 2 & 3, Page 4 & 5, ...)
-    for (var i = 1; i < pages.length; i += 2) {
-      final leftPage = pages[i];
-      if (i + 1 < pages.length) {
-        final rightPage = pages[i + 1];
-        final rowHeight = math.max(leftPage.height, rightPage.height);
-        final leftX = params.margin + (maxPageWidth - leftPage.width);
-        final leftY = y + (rowHeight - leftPage.height) / 2;
-        pageLayout[i] = Rect.fromLTWH(leftX, leftY, leftPage.width, leftPage.height);
-
-        final rightX = params.margin * 2 + maxPageWidth;
-        final rightY = y + (rowHeight - rightPage.height) / 2;
-        pageLayout[i + 1] = Rect.fromLTWH(rightX, rightY, rightPage.width, rightPage.height);
-
-        y += rowHeight + params.margin;
-      } else {
-        // Trailing lone page: centered
-        final leftX = (spreadWidth - leftPage.width) / 2;
-        pageLayout[i] = Rect.fromLTWH(leftX, y, leftPage.width, leftPage.height);
-        y += leftPage.height + params.margin;
-      }
-    }
-
-    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(spreadWidth, y));
-  }
-
   void _goToPage(int page) {
     if (_pdfController.isReady) {
       _pdfController.goToPage(pageNumber: page);
@@ -604,7 +604,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       } catch (_) {}
     }
     if (!context.mounted) return;
-    showModalBottomSheet<void>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
