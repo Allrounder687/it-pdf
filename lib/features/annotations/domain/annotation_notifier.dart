@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import '../../../core/pdf_engine/syncfusion_pdf_service.dart';
 import '../../../core/providers.dart';
 import '../data/annotation_storage.dart';
 import 'annotation_model.dart';
 import 'annotation_state.dart';
+
+/// Provider for SyncfusionPdfService.
+final syncfusionPdfServiceProvider = Provider<SyncfusionPdfService>((ref) {
+  return SyncfusionPdfService();
+});
 
 /// Provider for AnnotationStorage.
 final annotationStorageProvider = Provider<AnnotationStorage>((ref) {
@@ -20,6 +26,7 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
   AnnotationNotifier(this.documentId);
 
   AnnotationStorage get _storage => ref.read(annotationStorageProvider);
+  SyncfusionPdfService get _pdfEngine => ref.read(syncfusionPdfServiceProvider);
 
   @override
   AnnotationState build() {
@@ -189,10 +196,25 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
     await _storage.saveAnnotations(documentId, nextState);
   }
 
+  /// Permanently burns all annotations into the PDF file structure (ISO 32000).
+  Future<bool> burnAnnotationsToFile(String sourceFilePath, String destinationPath) async {
+    try {
+      await _pdfEngine.burnAnnotationsToPdf(
+        sourcePath: sourceFilePath,
+        annotations: state.annotations,
+        outputPath: destinationPath,
+      );
+      state = state.copyWith(isDirty: false);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   void _pushUndoSnapshot() {
     final updatedUndo = List<List<Annotation>>.from(state.undoStack)..add(state.annotations);
     if (updatedUndo.length > 30) {
-      updatedUndo.removeAt(0); // Bound undo stack to 30 snapshots
+      updatedUndo.removeAt(0);
     }
     state = state.copyWith(undoStack: updatedUndo);
   }
