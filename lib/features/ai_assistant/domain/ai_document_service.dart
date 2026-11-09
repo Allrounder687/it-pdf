@@ -154,4 +154,43 @@ class AiDocumentService {
 
     return buffer.toString().trim();
   }
+
+  /// Unified entrypoint for document queries returning grounded answer and citation page numbers.
+  AiResponse queryDocument({
+    required Map<int, String> pageTexts,
+    required String query,
+  }) {
+    final lower = query.toLowerCase();
+    String text;
+    if (lower.contains('summar')) {
+      text = generateSummary(pageTexts);
+    } else if (lower.contains('date') ||
+        lower.contains('deadline') ||
+        lower.contains('timeline')) {
+      text = extractKeyDates(pageTexts);
+    } else if (lower.contains('action') ||
+        lower.contains('obligation') ||
+        lower.contains('task')) {
+      text = extractActionItems(pageTexts);
+    } else {
+      text = answerQuestion(question: query, pageTexts: pageTexts);
+    }
+
+    final pageRegex = RegExp(r'\[Page\s+(\d+)\]', caseSensitive: false);
+    final pages = <int>{};
+    for (final m in pageRegex.allMatches(text)) {
+      final p = int.tryParse(m.group(1)!);
+      if (p != null) pages.add(p);
+    }
+
+    return AiResponse(answer: text, citedPages: pages.toList()..sort());
+  }
+}
+
+/// Grounded response from the AI Document Assistant with page citations.
+class AiResponse {
+  final String answer;
+  final List<int> citedPages;
+
+  const AiResponse({required this.answer, this.citedPages = const []});
 }

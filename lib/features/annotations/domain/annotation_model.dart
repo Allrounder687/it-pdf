@@ -141,6 +141,8 @@ class Annotation {
 
   Color get color => Color(colorValue).withValues(alpha: opacity);
 
+  String? get text => textContent;
+
   Annotation copyWith({
     String? id,
     String? documentId,

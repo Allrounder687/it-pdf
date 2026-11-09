@@ -36,3 +36,31 @@ class PrevPageDocumentIntent extends Intent {
 class NextPageDocumentIntent extends Intent {
   const NextPageDocumentIntent();
 }
+
+class OpenDocumentIntent extends Intent {
+  const OpenDocumentIntent();
+}
+
+class SaveAsDocumentIntent extends Intent {
+  const SaveAsDocumentIntent();
+}
+
+class PrintDocumentIntent extends Intent {
+  const PrintDocumentIntent();
+}
+
+class NextTabIntent extends Intent {
+  const NextTabIntent();
+}
+
+class PrevTabIntent extends Intent {
+  const PrevTabIntent();
+}
+
+class FirstPageIntent extends Intent {
+  const FirstPageIntent();
+}
+
+class LastPageIntent extends Intent {
+  const LastPageIntent();
+}

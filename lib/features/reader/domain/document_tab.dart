@@ -9,6 +9,7 @@ class DocumentTab {
   final int initialPage;
   final int totalPages;
   final DateTime openedAt;
+  final bool isDirty;
 
   const DocumentTab({
     required this.id,
@@ -17,6 +18,7 @@ class DocumentTab {
     this.initialPage = 1,
     this.totalPages = 1,
     required this.openedAt,
+    this.isDirty = false,
   });
 
   ReaderNotifierParams get readerParams => ReaderNotifierParams(
@@ -35,6 +37,7 @@ class DocumentTab {
       initialPage: meta.lastPageRead,
       totalPages: meta.totalPages,
       openedAt: DateTime.now(),
+      isDirty: false,
     );
   }
 
@@ -45,6 +48,7 @@ class DocumentTab {
     int? initialPage,
     int? totalPages,
     DateTime? openedAt,
+    bool? isDirty,
   }) {
     return DocumentTab(
       id: id ?? this.id,
@@ -53,6 +57,7 @@ class DocumentTab {
       initialPage: initialPage ?? this.initialPage,
       totalPages: totalPages ?? this.totalPages,
       openedAt: openedAt ?? this.openedAt,
+      isDirty: isDirty ?? this.isDirty,
     );
   }
 

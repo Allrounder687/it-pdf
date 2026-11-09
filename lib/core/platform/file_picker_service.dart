@@ -80,6 +80,27 @@ class FilePickerService {
     }
   }
 
+  /// Prompt user to choose export/save path using native platform save dialog.
+  Future<String?> pickSaveFilePath({
+    required String defaultFileName,
+    Uint8List? initialBytes,
+    String? dialogTitle,
+  }) async {
+    try {
+      final uri = await FilePicker.saveFile(
+        dialogTitle: dialogTitle,
+        fileName: defaultFileName,
+        bytes: initialBytes ?? Uint8List(0),
+      );
+      if (uri == null) return null;
+      if (uri.scheme == 'file') return uri.toFilePath();
+      return uri.path;
+    } catch (e, st) {
+      AppLogger.error('Error in pickSaveFilePath', error: e, stackTrace: st);
+      return getSaveDestinationPath(defaultFileName: defaultFileName);
+    }
+  }
+
   /// Prompt user to choose export/save path for a PDF file or return default safe path.
   Future<String?> getSaveDestinationPath({
     required String defaultFileName,

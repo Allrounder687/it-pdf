@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'pdf_engine/pdf_metadata_service.dart';
 import 'platform/file_picker_service.dart';
 import 'storage/preferences_service.dart';
 import 'storage/safe_document_storage.dart';
@@ -30,4 +31,9 @@ final safeDocumentStorageProvider = Provider<SafeDocumentStorage>((ref) {
 /// Provider for initial command-line arguments passed on app launch.
 final initialCliArgsProvider = Provider<List<String>>((ref) {
   return const [];
+});
+
+/// Provider for PdfMetadataService.
+final pdfMetadataServiceProvider = Provider<PdfMetadataService>((ref) {
+  return const PdfMetadataService();
 });

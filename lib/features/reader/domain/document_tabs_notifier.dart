@@ -141,4 +141,23 @@ class DocumentTabsNotifier extends Notifier<DocumentTabsState> {
     updatedTabs[state.activeIndex] = updated;
     state = state.copyWith(openTabs: updatedTabs);
   }
+
+  /// Mark a tab at [index] as having uncommitted changes.
+  void setTabDirty(int index, bool isDirty) {
+    if (index < 0 || index >= state.openTabs.length) return;
+    final current = state.openTabs[index];
+    if (current.isDirty == isDirty) return;
+    final updated = current.copyWith(isDirty: isDirty);
+    final updatedTabs = List<DocumentTab>.from(state.openTabs);
+    updatedTabs[index] = updated;
+    state = state.copyWith(openTabs: updatedTabs);
+  }
+
+  /// Mark a tab with [tabId] as dirty or clean.
+  void setTabDirtyById(String tabId, bool isDirty) {
+    final idx = state.openTabs.indexWhere((t) => t.id == tabId);
+    if (idx >= 0) {
+      setTabDirty(idx, isDirty);
+    }
+  }
 }
