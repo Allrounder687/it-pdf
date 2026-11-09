@@ -20,12 +20,12 @@ class DocumentTab {
   });
 
   ReaderNotifierParams get readerParams => ReaderNotifierParams(
-        id: id,
-        name: name,
-        path: path,
-        initialPage: initialPage,
-        initialPageCount: totalPages,
-      );
+    id: id,
+    name: name,
+    path: path,
+    initialPage: initialPage,
+    initialPageCount: totalPages,
+  );
 
   factory DocumentTab.fromMeta(DocumentMeta meta) {
     return DocumentTab(

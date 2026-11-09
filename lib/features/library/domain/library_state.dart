@@ -1,12 +1,7 @@
 import '../../../shared/models/document_meta.dart';
 
 /// Sort options for documents in the library.
-enum LibrarySortOption {
-  lastOpened,
-  name,
-  size,
-  dateAdded,
-}
+enum LibrarySortOption { lastOpened, name, size, dateAdded }
 
 /// State representation for the document library.
 class LibraryState {

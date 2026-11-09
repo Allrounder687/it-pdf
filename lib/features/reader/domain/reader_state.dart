@@ -7,12 +7,7 @@ enum ReaderLayout {
 }
 
 /// Reading theme modes for comfortable reading.
-enum ReaderThemeMode {
-  light,
-  dark,
-  sepia,
-  night,
-}
+enum ReaderThemeMode { light, dark, sepia, night }
 
 /// State representation for the active PDF Reader session.
 class ReaderState {

@@ -7,8 +7,8 @@ import 'document_tabs_state.dart';
 /// Provider managing open document tabs in the desktop shell.
 final documentTabsNotifierProvider =
     NotifierProvider<DocumentTabsNotifier, DocumentTabsState>(
-  DocumentTabsNotifier.new,
-);
+      DocumentTabsNotifier.new,
+    );
 
 class DocumentTabsNotifier extends Notifier<DocumentTabsState> {
   @override
@@ -18,8 +18,9 @@ class DocumentTabsNotifier extends Notifier<DocumentTabsState> {
 
   /// Open a document as an active tab. If already open, switch to it.
   void openTab(DocumentMeta doc) {
-    final existingIndex =
-        state.openTabs.indexWhere((tab) => tab.path == doc.path || tab.id == doc.id);
+    final existingIndex = state.openTabs.indexWhere(
+      (tab) => tab.path == doc.path || tab.id == doc.id,
+    );
 
     if (existingIndex >= 0) {
       state = state.copyWith(activeIndex: existingIndex);
@@ -57,8 +58,9 @@ class DocumentTabsNotifier extends Notifier<DocumentTabsState> {
     final closedTab = state.openTabs[index];
     final updatedTabs = List<DocumentTab>.from(state.openTabs)..removeAt(index);
 
-    final updatedRecentlyClosed = List<DocumentTab>.from(state.recentlyClosedTabs)
-      ..insert(0, closedTab);
+    final updatedRecentlyClosed = List<DocumentTab>.from(
+      state.recentlyClosedTabs,
+    )..insert(0, closedTab);
     if (updatedRecentlyClosed.length > 10) {
       updatedRecentlyClosed.removeLast();
     }
@@ -85,10 +87,7 @@ class DocumentTabsNotifier extends Notifier<DocumentTabsState> {
   void closeOtherTabs(int keepIndex) {
     if (keepIndex < 0 || keepIndex >= state.openTabs.length) return;
     final keptTab = state.openTabs[keepIndex];
-    state = state.copyWith(
-      openTabs: [keptTab],
-      activeIndex: 0,
-    );
+    state = state.copyWith(openTabs: [keptTab], activeIndex: 0);
   }
 
   /// Close all tabs to the right of [index].
@@ -96,18 +95,12 @@ class DocumentTabsNotifier extends Notifier<DocumentTabsState> {
     if (index < 0 || index >= state.openTabs.length - 1) return;
     final updatedTabs = state.openTabs.sublist(0, index + 1);
     final nextActive = state.activeIndex > index ? index : state.activeIndex;
-    state = state.copyWith(
-      openTabs: updatedTabs,
-      activeIndex: nextActive,
-    );
+    state = state.copyWith(openTabs: updatedTabs, activeIndex: nextActive);
   }
 
   /// Close all open tabs.
   void closeAllTabs() {
-    state = state.copyWith(
-      openTabs: const [],
-      activeIndex: -1,
-    );
+    state = state.copyWith(openTabs: const [], activeIndex: -1);
   }
 
   /// Reopen the most recently closed tab.

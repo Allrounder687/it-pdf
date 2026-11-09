@@ -33,7 +33,11 @@ class FilePickerService {
           .map((PlatformFile f) => f.path!)
           .toList();
     } catch (e, st) {
-      AppLogger.error('Error picking multiple PDF files', error: e, stackTrace: st);
+      AppLogger.error(
+        'Error picking multiple PDF files',
+        error: e,
+        stackTrace: st,
+      );
       return [];
     }
   }
@@ -41,9 +45,7 @@ class FilePickerService {
   /// Open native file picker to select images (for PDF conversion).
   Future<List<String>> pickImageFiles() async {
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.image,
-      );
+      final result = await FilePicker.pickFiles(type: FileType.image);
       return result
           .where((PlatformFile f) => f.path != null)
           .map((PlatformFile f) => f.path!)
@@ -69,19 +71,29 @@ class FilePickerService {
       if (uri.scheme == 'file') return uri.toFilePath();
       return uri.path;
     } catch (e, st) {
-      AppLogger.error('Error saving PDF bytes via file picker', error: e, stackTrace: st);
+      AppLogger.error(
+        'Error saving PDF bytes via file picker',
+        error: e,
+        stackTrace: st,
+      );
       return null;
     }
   }
 
   /// Prompt user to choose export/save path for a PDF file or return default safe path.
-  Future<String?> getSaveDestinationPath({required String defaultFileName}) async {
+  Future<String?> getSaveDestinationPath({
+    required String defaultFileName,
+  }) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final destination = p.join(dir.path, defaultFileName);
       return destination;
     } catch (e, st) {
-      AppLogger.error('Error obtaining save destination path', error: e, stackTrace: st);
+      AppLogger.error(
+        'Error obtaining save destination path',
+        error: e,
+        stackTrace: st,
+      );
       return null;
     }
   }

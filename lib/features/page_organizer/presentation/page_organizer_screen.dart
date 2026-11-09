@@ -10,10 +10,7 @@ import '../domain/page_organizer_notifier.dart';
 class PageOrganizerScreen extends ConsumerWidget {
   final PageOrganizerParams params;
 
-  const PageOrganizerScreen({
-    super.key,
-    required this.params,
-  });
+  const PageOrganizerScreen({super.key, required this.params});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,7 +30,10 @@ class PageOrganizerScreen extends ConsumerWidget {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Page Organizer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text(
+                'Page Organizer',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               Text(
                 '${state.pages.length} Pages${state.isDirty ? " (Unsaved Edits)" : ""} • ${params.name}',
                 style: TextStyle(
@@ -101,17 +101,18 @@ class PageOrganizerScreen extends ConsumerWidget {
                 ),
               )
             : state.pages.isEmpty
-                ? const Center(child: Text('No pages in document workspace.'))
-                : Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: _OrganizerGrid(
-                      documentPath: params.path,
-                      pages: state.pages,
-                      onReorder: (oldIdx, newIdx) => notifier.reorderPage(oldIdx, newIdx),
-                      onToggleSelect: (idx) => notifier.toggleSelect(idx),
-                      onRotate: (idx) => notifier.rotatePage(idx, 90),
-                    ),
-                  ),
+            ? const Center(child: Text('No pages in document workspace.'))
+            : Padding(
+                padding: const EdgeInsets.all(12),
+                child: _OrganizerGrid(
+                  documentPath: params.path,
+                  pages: state.pages,
+                  onReorder: (oldIdx, newIdx) =>
+                      notifier.reorderPage(oldIdx, newIdx),
+                  onToggleSelect: (idx) => notifier.toggleSelect(idx),
+                  onRotate: (idx) => notifier.rotatePage(idx, 90),
+                ),
+              ),
         bottomNavigationBar: state.selectedPages.isEmpty
             ? null
             : _OrganizerBottomBar(
@@ -119,7 +120,8 @@ class PageOrganizerScreen extends ConsumerWidget {
                 onRotateSelected: () => notifier.rotateSelected(90),
                 onDuplicateSelected: () => notifier.duplicateSelected(),
                 onDeleteSelected: () => _confirmDelete(context, notifier),
-                onExtractSelected: () => _handleExtract(context, notifier, filePicker),
+                onExtractSelected: () =>
+                    _handleExtract(context, notifier, filePicker),
               ),
       ),
     );
@@ -135,8 +137,8 @@ class PageOrganizerScreen extends ConsumerWidget {
         SnackBar(
           content: Text(
             success
-              ? 'Changes safely saved to PDF document!'
-              : 'Failed to save changes.',
+                ? 'Changes safely saved to PDF document!'
+                : 'Failed to save changes.',
           ),
           backgroundColor: success ? Colors.green : Colors.red,
         ),
@@ -333,7 +335,9 @@ class _PageCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(
-          color: item.isSelected ? Colors.blueAccent : (isDark ? Colors.white12 : Colors.black12),
+          color: item.isSelected
+              ? Colors.blueAccent
+              : (isDark ? Colors.white12 : Colors.black12),
           width: item.isSelected ? 2.5 : 1,
         ),
       ),
@@ -396,12 +400,18 @@ class _PageCard extends StatelessWidget {
                 children: [
                   Text(
                     'Page ${item.originalPageNumber}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   if (item.rotationDegrees > 0)
                     Text(
                       '${item.rotationDegrees}°',
-                      style: const TextStyle(fontSize: 11, color: Colors.blueAccent),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.blueAccent,
+                      ),
                     ),
                 ],
               ),

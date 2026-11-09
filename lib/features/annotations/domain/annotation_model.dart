@@ -46,7 +46,8 @@ class NormalizedPoint {
     );
   }
 
-  Offset toOffset(Size pageSize) => Offset(x * pageSize.width, y * pageSize.height);
+  Offset toOffset(Size pageSize) =>
+      Offset(x * pageSize.width, y * pageSize.height);
 
   static NormalizedPoint fromOffset(Offset offset, Size pageSize) {
     return NormalizedPoint(
@@ -74,11 +75,11 @@ class NormalizedRect {
   double get height => (bottom - top).abs();
 
   Map<String, dynamic> toMap() => {
-        'left': left,
-        'top': top,
-        'right': right,
-        'bottom': bottom,
-      };
+    'left': left,
+    'top': top,
+    'right': right,
+    'bottom': bottom,
+  };
 
   factory NormalizedRect.fromMap(Map<String, dynamic> map) {
     return NormalizedRect(
@@ -196,7 +197,8 @@ class Annotation {
       colorValue: map['colorValue'] as int,
       strokeWidth: (map['strokeWidth'] as num?)?.toDouble() ?? 2.0,
       opacity: (map['opacity'] as num?)?.toDouble() ?? 1.0,
-      points: (map['points'] as List<dynamic>?)
+      points:
+          (map['points'] as List<dynamic>?)
               ?.map((p) => NormalizedPoint.fromMap(p as Map<String, dynamic>))
               .toList() ??
           const [],

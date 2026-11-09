@@ -4,7 +4,9 @@ import '../../../core/providers.dart';
 import '../../../core/storage/preferences_service.dart';
 
 /// Provider for active theme mode ('system', 'light', 'dark').
-final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(ThemeModeNotifier.new);
+final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
+  ThemeModeNotifier.new,
+);
 
 class ThemeModeNotifier extends Notifier<ThemeMode> {
   PreferencesService get _prefs => ref.read(preferencesServiceProvider);
@@ -34,7 +36,10 @@ class SettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Settings',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: ListView(
         children: [
@@ -45,7 +50,9 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: Text(
               currentTheme == ThemeMode.system
                   ? 'System default'
-                  : (currentTheme == ThemeMode.dark ? 'Dark mode' : 'Light mode'),
+                  : (currentTheme == ThemeMode.dark
+                        ? 'Dark mode'
+                        : 'Light mode'),
             ),
             trailing: DropdownButton<ThemeMode>(
               value: currentTheme,
@@ -54,7 +61,10 @@ class SettingsScreen extends ConsumerWidget {
                 if (mode != null) themeNotifier.setThemeMode(mode);
               },
               items: const [
-                DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
+                DropdownMenuItem(
+                  value: ThemeMode.system,
+                  child: Text('System'),
+                ),
                 DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
                 DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
               ],
@@ -84,7 +94,9 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.code),
             title: const Text('Open Source Licenses'),
-            subtitle: const Text('PDFium (BSD 3-Clause), Dart PDF (Apache 2.0), pdfrx (MIT)'),
+            subtitle: const Text(
+              'PDFium (BSD 3-Clause), Dart PDF (Apache 2.0), pdfrx (MIT)',
+            ),
             onTap: () => showLicensePage(
               context: context,
               applicationName: 'IT PDF',

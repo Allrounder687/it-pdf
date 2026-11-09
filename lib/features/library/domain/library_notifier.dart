@@ -104,7 +104,11 @@ class LibraryNotifier extends Notifier<LibraryState> {
   }
 
   /// Update reading position.
-  Future<void> updateReadingProgress(String id, int page, int totalPages) async {
+  Future<void> updateReadingProgress(
+    String id,
+    int page,
+    int totalPages,
+  ) async {
     await _repository.updateReadingProgress(id, page, totalPages);
     await loadLibrary();
   }
@@ -119,12 +123,18 @@ class LibraryNotifier extends Notifier<LibraryState> {
 
   /// Assign folder category.
   Future<void> setFolder(String id, String? folder) async {
-    await _repository.setFolder(id, folder?.trim().isEmpty == true ? null : folder?.trim());
+    await _repository.setFolder(
+      id,
+      folder?.trim().isEmpty == true ? null : folder?.trim(),
+    );
     await loadLibrary();
   }
 
   /// Delete document from library.
-  Future<void> deleteDocument(String id, {bool deleteSourceFile = false}) async {
+  Future<void> deleteDocument(
+    String id, {
+    bool deleteSourceFile = false,
+  }) async {
     await _repository.removeDocument(id, deleteSourceFile: deleteSourceFile);
     final updatedSelected = Set<String>.from(state.selectedIds)..remove(id);
     state = state.copyWith(selectedIds: updatedSelected);
@@ -183,5 +193,6 @@ class LibraryNotifier extends Notifier<LibraryState> {
 }
 
 /// Provider for LibraryNotifier.
-final libraryNotifierProvider =
-    NotifierProvider<LibraryNotifier, LibraryState>(LibraryNotifier.new);
+final libraryNotifierProvider = NotifierProvider<LibraryNotifier, LibraryState>(
+  LibraryNotifier.new,
+);

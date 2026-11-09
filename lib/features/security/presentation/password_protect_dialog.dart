@@ -21,7 +21,8 @@ class PasswordProtectDialog extends StatefulWidget {
 
 class _PasswordProtectDialogState extends State<PasswordProtectDialog> {
   final TextEditingController _userPasswordController = TextEditingController();
-  final TextEditingController _ownerPasswordController = TextEditingController();
+  final TextEditingController _ownerPasswordController =
+      TextEditingController();
   bool _obscureUser = true;
   bool _obscureOwner = true;
   bool _isProcessing = false;
@@ -108,8 +109,11 @@ class _PasswordProtectDialogState extends State<PasswordProtectDialog> {
                   border: const OutlineInputBorder(),
                   isDense: true,
                   suffixIcon: IconButton(
-                    icon: Icon(_obscureUser ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => _obscureUser = !_obscureUser),
+                    icon: Icon(
+                      _obscureUser ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscureUser = !_obscureUser),
                   ),
                 ),
               ),
@@ -122,8 +126,11 @@ class _PasswordProtectDialogState extends State<PasswordProtectDialog> {
                   border: const OutlineInputBorder(),
                   isDense: true,
                   suffixIcon: IconButton(
-                    icon: Icon(_obscureOwner ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => _obscureOwner = !_obscureOwner),
+                    icon: Icon(
+                      _obscureOwner ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscureOwner = !_obscureOwner),
                   ),
                 ),
               ),

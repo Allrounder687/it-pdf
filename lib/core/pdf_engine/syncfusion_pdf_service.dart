@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
@@ -9,18 +10,24 @@ import '../storage/safe_document_storage.dart';
 /// Hierarchical outline entry representing a document chapter or section bookmark.
 class PdfOutlineEntry {
   final String title;
-  final int targetPage; // 1-based page number
+  final int? targetPage; // 1-based page number; null if unresolved
+  final bool isResolved;
   final int level;
+  final int index;
+  final List<int> treePath;
   final double? destinationTop;
   final double? destinationLeft;
 
   const PdfOutlineEntry({
     required this.title,
-    required this.targetPage,
+    this.targetPage,
+    bool? isResolved,
     this.level = 0,
+    this.index = 0,
+    this.treePath = const [],
     this.destinationTop,
     this.destinationLeft,
-  });
+  }) : isResolved = isResolved ?? (targetPage != null && targetPage > 0);
 }
 
 /// Complete native ISO 32000 PDF manipulation service.
@@ -30,7 +37,7 @@ class SyncfusionPdfService {
   final SafeDocumentStorage _safeStorage;
 
   SyncfusionPdfService({SafeDocumentStorage? safeStorage})
-      : _safeStorage = safeStorage ?? SafeDocumentStorage();
+    : _safeStorage = safeStorage ?? SafeDocumentStorage();
 
   /// Merges multiple PDF files into a single destination file.
   Future<String> mergePdfs({
@@ -166,7 +173,8 @@ class SyncfusionPdfService {
     final doc = sf.PdfDocument(inputBytes: bytes);
 
     try {
-      final toDelete = pageNumbersToDelete.map((p) => p - 1).toSet().toList()..sort();
+      final toDelete = pageNumbersToDelete.map((p) => p - 1).toSet().toList()
+        ..sort();
       for (int i = toDelete.length - 1; i >= 0; i--) {
         final idx = toDelete[i];
         if (idx >= 0 && idx < doc.pages.count) {
@@ -250,20 +258,27 @@ class SyncfusionPdfService {
                 rect,
                 ann.textContent ?? '',
                 pdfColor,
-                textMarkupAnnotationType: sf.PdfTextMarkupAnnotationType.highlight,
+                textMarkupAnnotationType:
+                    sf.PdfTextMarkupAnnotationType.highlight,
               );
               page.annotations.add(markup);
             } else if (ann.points.length > 1) {
               // Freeform highlighter strokes: draw smooth translucent stroke
               page.graphics.save();
-              page.graphics.setTransparency(ann.opacity > 0 ? ann.opacity : 0.4);
+              page.graphics.setTransparency(
+                ann.opacity > 0 ? ann.opacity : 0.4,
+              );
               final pen = sf.PdfPen(pdfColor, width: ann.strokeWidth);
               pen.lineCap = sf.PdfLineCap.round;
               pen.lineJoin = sf.PdfLineJoin.round;
               for (int i = 1; i < ann.points.length; i++) {
                 final pt1 = ann.points[i - 1].toOffset(pageSize);
                 final pt2 = ann.points[i].toOffset(pageSize);
-                page.graphics.drawLine(pen, Offset(pt1.dx, pt1.dy), Offset(pt2.dx, pt2.dy));
+                page.graphics.drawLine(
+                  pen,
+                  Offset(pt1.dx, pt1.dy),
+                  Offset(pt2.dx, pt2.dy),
+                );
               }
               page.graphics.restore();
             }
@@ -321,7 +336,9 @@ class SyncfusionPdfService {
                 [p1.dx.toInt(), p1.dy.toInt(), p2.dx.toInt(), p2.dy.toInt()],
                 ann.textContent ?? '',
                 color: pdfColor,
-                border: sf.PdfAnnotationBorder(ann.strokeWidth.clamp(1.0, 10.0)),
+                border: sf.PdfAnnotationBorder(
+                  ann.strokeWidth.clamp(1.0, 10.0),
+                ),
               );
               lineAnn.endLineStyle = sf.PdfLineEndingStyle.openArrow;
               page.annotations.add(lineAnn);
@@ -352,7 +369,11 @@ class SyncfusionPdfService {
               for (int i = 1; i < ann.points.length; i++) {
                 final pt1 = ann.points[i - 1].toOffset(pageSize);
                 final pt2 = ann.points[i].toOffset(pageSize);
-                page.graphics.drawLine(pen, Offset(pt1.dx, pt1.dy), Offset(pt2.dx, pt2.dy));
+                page.graphics.drawLine(
+                  pen,
+                  Offset(pt1.dx, pt1.dy),
+                  Offset(pt2.dx, pt2.dy),
+                );
               }
               page.graphics.restore();
             }
@@ -389,7 +410,10 @@ class SyncfusionPdfService {
     try {
       final extractor = sf.PdfTextExtractor(doc);
       for (int i = 0; i < doc.pages.count; i++) {
-        final pageText = extractor.extractText(startPageIndex: i, endPageIndex: i);
+        final pageText = extractor.extractText(
+          startPageIndex: i,
+          endPageIndex: i,
+        );
         result[i + 1] = pageText.trim();
       }
       return result;
@@ -399,7 +423,10 @@ class SyncfusionPdfService {
   }
 
   /// Extracts text from a specific single page on-demand.
-  Future<String> extractSinglePageText(String sourcePath, int pageNumber) async {
+  Future<String> extractSinglePageText(
+    String sourcePath,
+    int pageNumber,
+  ) async {
     final file = File(sourcePath);
     if (!await file.exists()) return '';
 
@@ -410,7 +437,9 @@ class SyncfusionPdfService {
       final pageIndex = pageNumber - 1;
       if (pageIndex < 0 || pageIndex >= doc.pages.count) return '';
       final extractor = sf.PdfTextExtractor(doc);
-      return extractor.extractText(startPageIndex: pageIndex, endPageIndex: pageIndex).trim();
+      return extractor
+          .extractText(startPageIndex: pageIndex, endPageIndex: pageIndex)
+          .trim();
     } catch (_) {
       return '';
     } finally {
@@ -563,27 +592,46 @@ class SyncfusionPdfService {
 
   /// Extracts hierarchical document bookmarks / Table of Contents tree.
   /// Resolves both explicit and named destinations to prevent the page-1 fallback bug.
+  /// Executes on a background isolate to keep UI frame rendering smooth.
   Future<List<PdfOutlineEntry>> extractBookmarks(String sourcePath) async {
     final file = File(sourcePath);
     if (!await file.exists()) return [];
 
-    final bytes = await file.readAsBytes();
+    try {
+      final bytes = await file.readAsBytes();
+      return await Isolate.run(() => parseBookmarksFromBytes(bytes));
+    } catch (e) {
+      AppLogger.warn('Error extracting bookmarks via Syncfusion isolate: $e');
+      return [];
+    }
+  }
+
+  /// Synchronously parses bookmark entries from raw PDF bytes.
+  static List<PdfOutlineEntry> parseBookmarksFromBytes(Uint8List bytes) {
     final doc = sf.PdfDocument(inputBytes: bytes);
     final results = <PdfOutlineEntry>[];
+    int globalIndex = 0;
 
     try {
-      void parseBookmarks(sf.PdfBookmarkBase collection, int level) {
+      void parseBookmarks(
+        sf.PdfBookmarkBase collection,
+        int level,
+        List<int> parentPath,
+      ) {
         for (int i = 0; i < collection.count; i++) {
           final bm = collection[i];
-          int targetPage = 1;
+          final currentPath = [...parentPath, i];
+          int? targetPage;
+          bool isResolved = false;
           double? destTop;
           double? destLeft;
 
           final dest = bm.destination;
           if (dest != null) {
             final pageIdx = doc.pages.indexOf(dest.page);
-            if (pageIdx >= 0) {
+            if (pageIdx >= 0 && pageIdx < doc.pages.count) {
               targetPage = pageIdx + 1;
+              isResolved = true;
               destTop = dest.location.dy;
               destLeft = dest.location.dx;
             }
@@ -591,11 +639,11 @@ class SyncfusionPdfService {
             final namedDest = bm.namedDestination!;
             sf.PdfPage? resolvedPage = namedDest.destination?.page;
 
-            // If destination page is null, look up in document namedDestinationCollection
             if (resolvedPage == null) {
               for (int n = 0; n < doc.namedDestinationCollection.count; n++) {
                 final entry = doc.namedDestinationCollection[n];
-                if (entry.title == namedDest.title && entry.destination != null) {
+                if (entry.title == namedDest.title &&
+                    entry.destination != null) {
                   resolvedPage = entry.destination!.page;
                   destTop = entry.destination!.location.dy;
                   destLeft = entry.destination!.location.dx;
@@ -609,31 +657,65 @@ class SyncfusionPdfService {
 
             if (resolvedPage != null) {
               final pageIdx = doc.pages.indexOf(resolvedPage);
-              if (pageIdx >= 0) {
+              if (pageIdx >= 0 && pageIdx < doc.pages.count) {
                 targetPage = pageIdx + 1;
+                isResolved = true;
               }
             }
           }
 
-          final cleanTitle = bm.title.trim().isNotEmpty ? bm.title.trim() : 'Bookmark ${i + 1}';
-          results.add(PdfOutlineEntry(
-            title: cleanTitle,
-            targetPage: targetPage,
-            level: level,
-            destinationTop: destTop,
-            destinationLeft: destLeft,
-          ));
+          // Fallback: match by title against document named destinations if destination was indirect
+          if (!isResolved) {
+            for (int n = 0; n < doc.namedDestinationCollection.count; n++) {
+              final entry = doc.namedDestinationCollection[n];
+              if (entry.title.trim() == bm.title.trim() &&
+                  entry.destination != null) {
+                final resolvedPage = entry.destination!.page;
+                final pageIdx = doc.pages.indexOf(resolvedPage);
+                if (pageIdx >= 0 && pageIdx < doc.pages.count) {
+                  targetPage = pageIdx + 1;
+                  isResolved = true;
+                  destTop = entry.destination!.location.dy;
+                  destLeft = entry.destination!.location.dx;
+                  break;
+                }
+              }
+            }
+          }
+
+          // Bound validation: targetPage must fall strictly within document bounds
+          if (targetPage != null &&
+              (targetPage < 1 || targetPage > doc.pages.count)) {
+            targetPage = null;
+            isResolved = false;
+          }
+
+          final cleanTitle = bm.title.trim().isNotEmpty
+              ? bm.title.trim()
+              : 'Bookmark ${globalIndex + 1}';
+          results.add(
+            PdfOutlineEntry(
+              title: cleanTitle,
+              targetPage: targetPage,
+              isResolved: isResolved,
+              level: level,
+              index: globalIndex++,
+              treePath: currentPath,
+              destinationTop: destTop,
+              destinationLeft: destLeft,
+            ),
+          );
           if (bm.count > 0) {
-            parseBookmarks(bm, level + 1);
+            parseBookmarks(bm, level + 1, currentPath);
           }
         }
       }
 
-      parseBookmarks(doc.bookmarks, 0);
+      parseBookmarks(doc.bookmarks, 0, []);
       return results;
     } catch (e) {
-      AppLogger.warn('Error extracting bookmarks via Syncfusion: $e');
-      return [];
+      AppLogger.warn('Error inside parseBookmarksFromBytes: $e');
+      return results;
     } finally {
       doc.dispose();
     }

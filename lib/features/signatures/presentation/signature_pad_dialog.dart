@@ -15,8 +15,9 @@ class _SignaturePadDialogState extends ConsumerState<SignaturePadDialog> {
   final List<List<SignaturePoint>> _strokes = [];
   List<SignaturePoint> _currentStroke = [];
   Color _selectedColor = Colors.black;
-  final TextEditingController _nameController =
-      TextEditingController(text: 'My Signature');
+  final TextEditingController _nameController = TextEditingController(
+    text: 'My Signature',
+  );
 
   @override
   void dispose() {
@@ -30,7 +31,7 @@ class _SignaturePadDialogState extends ConsumerState<SignaturePadDialog> {
         SignaturePoint(
           x: details.localPosition.dx,
           y: details.localPosition.dy,
-        )
+        ),
       ];
     });
   }
@@ -124,7 +125,9 @@ class _SignaturePadDialogState extends ConsumerState<SignaturePadDialog> {
                   color: isDark ? const Color(0xFF161F30) : Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
+                    color: isDark
+                        ? const Color(0xFF334155)
+                        : Colors.grey.shade300,
                   ),
                 ),
                 child: ClipRRect(
@@ -157,12 +160,16 @@ class _SignaturePadDialogState extends ConsumerState<SignaturePadDialog> {
                   _ColorDot(
                     color: const Color(0xFF0D47A1), // Deep Blue
                     isSelected: _selectedColor == const Color(0xFF0D47A1),
-                    onTap: () => setState(() => _selectedColor = const Color(0xFF0D47A1)),
+                    onTap: () => setState(
+                      () => _selectedColor = const Color(0xFF0D47A1),
+                    ),
                   ),
                   _ColorDot(
                     color: const Color(0xFFB71C1C), // Deep Red
                     isSelected: _selectedColor == const Color(0xFFB71C1C),
-                    onTap: () => setState(() => _selectedColor = const Color(0xFFB71C1C)),
+                    onTap: () => setState(
+                      () => _selectedColor = const Color(0xFFB71C1C),
+                    ),
                   ),
                   const Spacer(),
                   TextButton.icon(

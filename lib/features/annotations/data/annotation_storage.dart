@@ -21,19 +21,30 @@ class AnnotationStorage {
           .map((item) => Annotation.fromMap(item as Map<String, dynamic>))
           .toList();
     } catch (e, st) {
-      AppLogger.error('Failed to load annotations for $documentId', error: e, stackTrace: st);
+      AppLogger.error(
+        'Failed to load annotations for $documentId',
+        error: e,
+        stackTrace: st,
+      );
       return [];
     }
   }
 
   /// Persist annotations for a given document.
-  Future<bool> saveAnnotations(String documentId, List<Annotation> annotations) async {
+  Future<bool> saveAnnotations(
+    String documentId,
+    List<Annotation> annotations,
+  ) async {
     try {
       final key = '$_prefix$documentId';
       final list = annotations.map((a) => a.toMap()).toList();
       return await _prefs.setString(key, jsonEncode(list));
     } catch (e, st) {
-      AppLogger.error('Failed to persist annotations for $documentId', error: e, stackTrace: st);
+      AppLogger.error(
+        'Failed to persist annotations for $documentId',
+        error: e,
+        stackTrace: st,
+      );
       return false;
     }
   }

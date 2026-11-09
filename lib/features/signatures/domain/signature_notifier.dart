@@ -51,4 +51,6 @@ class SignatureNotifier extends Notifier<List<SignatureProfile>> {
 
 /// Provider for SignatureNotifier.
 final signatureNotifierProvider =
-    NotifierProvider<SignatureNotifier, List<SignatureProfile>>(SignatureNotifier.new);
+    NotifierProvider<SignatureNotifier, List<SignatureProfile>>(
+      SignatureNotifier.new,
+    );

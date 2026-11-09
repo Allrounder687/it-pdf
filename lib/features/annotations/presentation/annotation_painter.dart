@@ -36,7 +36,12 @@ class AnnotationPainter extends CustomPainter {
     }
   }
 
-  void _drawAnnotation(Canvas canvas, Size size, Annotation ann, bool isSelected) {
+  void _drawAnnotation(
+    Canvas canvas,
+    Size size,
+    Annotation ann,
+    bool isSelected,
+  ) {
     final paint = Paint()
       ..color = ann.color
       ..strokeWidth = ann.strokeWidth
@@ -136,10 +141,16 @@ class AnnotationPainter extends CustomPainter {
             ..color = Colors.black26
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
           canvas.drawRRect(
-            RRect.fromRectAndRadius(rect.shift(const Offset(1, 1)), const Radius.circular(4)),
+            RRect.fromRectAndRadius(
+              rect.shift(const Offset(1, 1)),
+              const Radius.circular(4),
+            ),
             shadowPaint,
           );
-          canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(4)), notePaint);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect, const Radius.circular(4)),
+            notePaint,
+          );
 
           // Draw note glyph lines
           final glyphPaint = Paint()
@@ -149,8 +160,16 @@ class AnnotationPainter extends CustomPainter {
           final startX = rect.left + 4;
           final endX = rect.right - 4;
           if (endX > startX) {
-            canvas.drawLine(Offset(startX, rect.top + 6), Offset(endX, rect.top + 6), glyphPaint);
-            canvas.drawLine(Offset(startX, rect.top + 10), Offset(endX, rect.top + 10), glyphPaint);
+            canvas.drawLine(
+              Offset(startX, rect.top + 6),
+              Offset(endX, rect.top + 6),
+              glyphPaint,
+            );
+            canvas.drawLine(
+              Offset(startX, rect.top + 10),
+              Offset(endX, rect.top + 10),
+              glyphPaint,
+            );
           }
         }
         break;
@@ -161,14 +180,23 @@ class AnnotationPainter extends CustomPainter {
           final bgPaint = Paint()
             ..color = Colors.white.withValues(alpha: 0.9)
             ..style = PaintingStyle.fill;
-          canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), bgPaint);
-          canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), paint);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+            bgPaint,
+          );
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+            paint,
+          );
 
           final textSpan = TextSpan(
             text: ann.textContent,
             style: TextStyle(color: ann.color, fontSize: 12),
           );
-          final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
+          final textPainter = TextPainter(
+            text: textSpan,
+            textDirection: TextDirection.ltr,
+          );
           textPainter.layout(maxWidth: rect.width - 4);
           textPainter.paint(canvas, Offset(rect.left + 2, rect.top + 2));
         }
@@ -192,9 +220,15 @@ class AnnotationPainter extends CustomPainter {
       ..color = activeTool == AnnotationTool.highlighter
           ? activeColor.withValues(alpha: 0.4)
           : activeColor
-      ..strokeWidth = activeTool == AnnotationTool.highlighter ? 18.0 : activeStrokeWidth
-      ..style = (activeTool == AnnotationTool.stickyNote) ? PaintingStyle.fill : PaintingStyle.stroke
-      ..strokeCap = activeTool == AnnotationTool.highlighter ? StrokeCap.square : StrokeCap.round
+      ..strokeWidth = activeTool == AnnotationTool.highlighter
+          ? 18.0
+          : activeStrokeWidth
+      ..style = (activeTool == AnnotationTool.stickyNote)
+          ? PaintingStyle.fill
+          : PaintingStyle.stroke
+      ..strokeCap = activeTool == AnnotationTool.highlighter
+          ? StrokeCap.square
+          : StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
     if (activeTool == AnnotationTool.highlighter) {
@@ -218,17 +252,28 @@ class AnnotationPainter extends CustomPainter {
 
       case AnnotationTool.underline:
         final rect = Rect.fromPoints(start, end);
-        canvas.drawLine(Offset(rect.left, rect.bottom), Offset(rect.right, rect.bottom), paint);
+        canvas.drawLine(
+          Offset(rect.left, rect.bottom),
+          Offset(rect.right, rect.bottom),
+          paint,
+        );
         break;
 
       case AnnotationTool.strikethrough:
         final rect = Rect.fromPoints(start, end);
-        canvas.drawLine(Offset(rect.left, rect.center.dy), Offset(rect.right, rect.center.dy), paint);
+        canvas.drawLine(
+          Offset(rect.left, rect.center.dy),
+          Offset(rect.right, rect.center.dy),
+          paint,
+        );
         break;
 
       case AnnotationTool.stickyNote:
         final rect = Rect.fromLTWH(end.dx - 14, end.dy - 14, 28, 28);
-        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(4)), paint);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, const Radius.circular(4)),
+          paint,
+        );
         break;
 
       default:

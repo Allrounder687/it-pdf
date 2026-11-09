@@ -30,16 +30,24 @@ class AnnotationOverlay extends ConsumerWidget {
 
     return Positioned.fill(
       child: GestureDetector(
-        behavior: isToolActive ? HitTestBehavior.opaque : HitTestBehavior.translucent,
+        behavior: isToolActive
+            ? HitTestBehavior.opaque
+            : HitTestBehavior.translucent,
         onPanStart: isToolActive
             ? (details) {
-                final point = NormalizedPoint.fromOffset(details.localPosition, pageSize);
+                final point = NormalizedPoint.fromOffset(
+                  details.localPosition,
+                  pageSize,
+                );
                 notifier.startDrawing(point);
               }
             : null,
         onPanUpdate: isToolActive
             ? (details) {
-                final point = NormalizedPoint.fromOffset(details.localPosition, pageSize);
+                final point = NormalizedPoint.fromOffset(
+                  details.localPosition,
+                  pageSize,
+                );
                 notifier.updateDrawing(point);
               }
             : null,
@@ -52,7 +60,9 @@ class AnnotationOverlay extends ConsumerWidget {
           size: pageSize,
           painter: AnnotationPainter(
             annotations: pageAnnotations,
-            activePoints: annotationState.isDrawing ? annotationState.activePoints : const [],
+            activePoints: annotationState.isDrawing
+                ? annotationState.activePoints
+                : const [],
             activeColor: annotationState.currentColor,
             activeStrokeWidth: annotationState.currentStrokeWidth,
             isDrawing: annotationState.isDrawing,

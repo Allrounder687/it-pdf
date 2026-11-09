@@ -91,9 +91,9 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update form: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update form: $e')));
       }
     }
   }
@@ -130,7 +130,9 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
               else if (_fields.isEmpty)
                 const Expanded(
                   child: Center(
-                    child: Text('No interactive form fields found in this document.'),
+                    child: Text(
+                      'No interactive form fields found in this document.',
+                    ),
                   ),
                 )
               else
@@ -142,29 +144,41 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
                       final f = _fields[index];
                       final name = f['name'] as String;
                       final type = f['type'] as String;
-                      final options = (f['options'] as List<dynamic>?)?.cast<String>() ?? [];
+                      final options =
+                          (f['options'] as List<dynamic>?)?.cast<String>() ??
+                          [];
 
                       if (type == 'checkbox') {
                         return CheckboxListTile(
                           title: Text(name),
                           value: _checkboxValues[name] ?? false,
                           onChanged: (val) {
-                            setState(() => _checkboxValues[name] = val ?? false);
+                            setState(
+                              () => _checkboxValues[name] = val ?? false,
+                            );
                           },
                         );
                       }
 
-                      if ((type == 'combobox' || type == 'radio') && options.isNotEmpty) {
-                        final currentVal = _dropdownValues[name] ?? (options.isNotEmpty ? options.first : '');
+                      if ((type == 'combobox' || type == 'radio') &&
+                          options.isNotEmpty) {
+                        final currentVal =
+                            _dropdownValues[name] ??
+                            (options.isNotEmpty ? options.first : '');
                         return DropdownButtonFormField<String>(
                           decoration: InputDecoration(
                             labelText: name,
                             border: const OutlineInputBorder(),
                             isDense: true,
                           ),
-                          initialValue: options.contains(currentVal) ? currentVal : options.first,
+                          initialValue: options.contains(currentVal)
+                              ? currentVal
+                              : options.first,
                           items: options.map((opt) {
-                            return DropdownMenuItem(value: opt, child: Text(opt));
+                            return DropdownMenuItem(
+                              value: opt,
+                              child: Text(opt),
+                            );
                           }).toList(),
                           onChanged: (val) {
                             if (val != null) {
@@ -189,7 +203,9 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Flatten Form on Save'),
-                subtitle: const Text('Permanently embeds field data into the document (ISO 32000)'),
+                subtitle: const Text(
+                  'Permanently embeds field data into the document (ISO 32000)',
+                ),
                 value: _flattenForm,
                 onChanged: (val) => setState(() => _flattenForm = val),
               ),

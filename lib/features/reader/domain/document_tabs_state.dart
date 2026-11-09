@@ -12,11 +12,9 @@ class DocumentTabsState {
     this.recentlyClosedTabs = const [],
   });
 
-  bool get hasActiveTab =>
-      activeIndex >= 0 && activeIndex < openTabs.length;
+  bool get hasActiveTab => activeIndex >= 0 && activeIndex < openTabs.length;
 
-  DocumentTab? get activeTab =>
-      hasActiveTab ? openTabs[activeIndex] : null;
+  DocumentTab? get activeTab => hasActiveTab ? openTabs[activeIndex] : null;
 
   int get tabCount => openTabs.length;
 

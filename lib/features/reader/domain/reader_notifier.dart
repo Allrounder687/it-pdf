@@ -50,21 +50,17 @@ class ReaderNotifier extends Notifier<ReaderState> {
   void setPage(int page) {
     if (page == state.currentPage) return;
     state = state.copyWith(currentPage: page);
-    ref.read(libraryNotifierProvider.notifier).updateReadingProgress(
-          state.documentId,
-          page,
-          state.pageCount,
-        );
+    ref
+        .read(libraryNotifierProvider.notifier)
+        .updateReadingProgress(state.documentId, page, state.pageCount);
   }
 
   void setPageCount(int count) {
     if (count == state.pageCount) return;
     state = state.copyWith(pageCount: count);
-    ref.read(libraryNotifierProvider.notifier).updateReadingProgress(
-          state.documentId,
-          state.currentPage,
-          count,
-        );
+    ref
+        .read(libraryNotifierProvider.notifier)
+        .updateReadingProgress(state.documentId, state.currentPage, count);
   }
 
   void setZoom(double zoom) {
@@ -112,13 +108,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 
   void setSearchResults(int count, int index) {
-    state = state.copyWith(
-      searchMatchCount: count,
-      currentSearchIndex: index,
-    );
+    state = state.copyWith(searchMatchCount: count, currentSearchIndex: index);
   }
 }
 
 /// Family provider for ReaderNotifier scoped to document parameters.
-final readerNotifierProvider = NotifierProvider.family<
-    ReaderNotifier, ReaderState, ReaderNotifierParams>(ReaderNotifier.new);
+final readerNotifierProvider =
+    NotifierProvider.family<ReaderNotifier, ReaderState, ReaderNotifierParams>(
+      ReaderNotifier.new,
+    );

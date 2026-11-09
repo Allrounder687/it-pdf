@@ -4,20 +4,26 @@ import 'package:pdfrx/pdfrx.dart';
 /// Representation of an outline / bookmark entry with destination coordinate metadata.
 class OutlineItem {
   final String title;
-  final int targetPage;
+  final int? targetPage; // 1-based page number; null if unresolved
+  final bool isResolved;
   final PdfDest? dest;
   final int level;
+  final int index;
+  final List<int> treePath;
   final double? destinationTop;
   final double? destinationLeft;
 
   const OutlineItem({
     required this.title,
-    required this.targetPage,
+    this.targetPage,
+    bool? isResolved,
     this.dest,
     this.level = 0,
+    this.index = 0,
+    this.treePath = const [],
     this.destinationTop,
     this.destinationLeft,
-  });
+  }) : isResolved = isResolved ?? (targetPage != null && targetPage > 0);
 }
 
 /// Navigation drawer for browsing hierarchical document bookmarks & outline.
@@ -46,12 +52,19 @@ class OutlineDrawer extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
               child: Row(
                 children: [
-                  const Icon(Icons.bookmarks_outlined, color: Colors.blueAccent, size: 20),
+                  const Icon(
+                    Icons.bookmarks_outlined,
+                    color: Colors.blueAccent,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
                       'Table of Contents',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -72,17 +85,27 @@ class OutlineDrawer extends StatelessWidget {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.menu_book_outlined, size: 48, color: Colors.grey.shade400),
+                            Icon(
+                              Icons.menu_book_outlined,
+                              size: 48,
+                              color: Colors.grey.shade400,
+                            ),
                             const SizedBox(height: 12),
                             const Text(
                               'No Table of Contents',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
                             ),
                             const SizedBox(height: 6),
                             const Text(
                               'This PDF document does not contain embedded bookmarks or outline metadata.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey, fontSize: 13),
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
@@ -93,11 +116,14 @@ class OutlineDrawer extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final entry = outline[index];
                         final indent = (entry.level * 16.0).clamp(0.0, 80.0);
-                        final isCurrentPage = entry.targetPage == currentPage;
+                        final isCurrentPage =
+                            entry.isResolved && entry.targetPage == currentPage;
 
                         return Material(
                           color: isCurrentPage
-                              ? (isDark ? Colors.blue.withValues(alpha: 0.2) : Colors.blue.shade50)
+                              ? (isDark
+                                    ? Colors.blue.withValues(alpha: 0.2)
+                                    : Colors.blue.shade50)
                               : Colors.transparent,
                           child: InkWell(
                             onTap: () {
@@ -105,46 +131,93 @@ class OutlineDrawer extends StatelessWidget {
                               onSelect(entry);
                             },
                             child: Padding(
-                              padding: EdgeInsets.fromLTRB(16 + indent, 10, 16, 10),
+                              padding: EdgeInsets.fromLTRB(
+                                16 + indent,
+                                10,
+                                16,
+                                10,
+                              ),
                               child: Row(
                                 children: [
                                   Icon(
-                                    entry.level == 0 ? Icons.folder_open : Icons.article_outlined,
+                                    entry.level == 0
+                                        ? Icons.folder_open
+                                        : Icons.article_outlined,
                                     size: 16,
                                     color: isCurrentPage
                                         ? Colors.blueAccent
-                                        : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                                        : (isDark
+                                              ? Colors.grey.shade400
+                                              : Colors.grey.shade600),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       entry.title,
                                       style: TextStyle(
-                                        fontWeight: entry.level == 0 || isCurrentPage
+                                        fontWeight:
+                                            entry.level == 0 || isCurrentPage
                                             ? FontWeight.bold
                                             : FontWeight.normal,
                                         fontSize: 13,
-                                        color: isCurrentPage ? Colors.blueAccent : null,
+                                        color: isCurrentPage
+                                            ? Colors.blueAccent
+                                            : null,
                                       ),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  if (entry.targetPage > 0)
+                                  if (entry.isResolved &&
+                                      entry.targetPage != null)
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: isCurrentPage
-                                            ? Colors.blueAccent.withValues(alpha: 0.2)
-                                            : (isDark ? Colors.white12 : Colors.grey.shade200),
+                                            ? Colors.blueAccent.withValues(
+                                                alpha: 0.2,
+                                              )
+                                            : (isDark
+                                                  ? Colors.white12
+                                                  : Colors.grey.shade200),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
                                         'p. ${entry.targetPage}',
                                         style: TextStyle(
                                           fontSize: 11,
-                                          fontWeight: isCurrentPage ? FontWeight.bold : FontWeight.normal,
-                                          color: isCurrentPage ? Colors.blueAccent : Colors.grey,
+                                          fontWeight: isCurrentPage
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          color: isCurrentPage
+                                              ? Colors.blueAccent
+                                              : Colors.grey,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Colors.white10
+                                            : Colors.grey.shade200,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Unresolved',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontStyle: FontStyle.italic,
+                                          color: isDark
+                                              ? Colors.grey.shade400
+                                              : Colors.grey.shade600,
                                         ),
                                       ),
                                     ),

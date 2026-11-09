@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/document_meta.dart';
 import '../domain/library_notifier.dart';
 import '../domain/library_state.dart';
+import '../../reader/domain/document_tabs_notifier.dart';
 import '../../reader/domain/reader_notifier.dart';
 import '../../reader/presentation/reader_screen.dart';
 
@@ -20,7 +21,10 @@ class LibraryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: isMultiSelect
             ? Text('${state.selectedIds.length} Selected')
-            : const Text('Document Library', style: TextStyle(fontWeight: FontWeight.bold)),
+            : const Text(
+                'Document Library',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
         actions: isMultiSelect
             ? [
                 IconButton(
@@ -29,7 +33,10 @@ class LibraryScreen extends ConsumerWidget {
                   onPressed: () => notifier.selectAll(),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                  ),
                   tooltip: 'Delete Selected',
                   onPressed: () => _confirmBatchDelete(context, notifier),
                 ),
@@ -41,7 +48,9 @@ class LibraryScreen extends ConsumerWidget {
               ]
             : [
                 IconButton(
-                  icon: Icon(state.isGridView ? Icons.view_list : Icons.grid_view),
+                  icon: Icon(
+                    state.isGridView ? Icons.view_list : Icons.grid_view,
+                  ),
                   tooltip: state.isGridView ? 'List View' : 'Grid View',
                   onPressed: () => notifier.toggleViewMode(),
                 ),
@@ -114,15 +123,17 @@ class LibraryScreen extends ConsumerWidget {
                     onSelected: (_) => notifier.setFilterFolder(null),
                   ),
                   const SizedBox(width: 8),
-                  ...state.availableFolders.map((folder) => Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(folder),
-                          selected: state.filterFolder == folder,
-                          onSelected: (selected) =>
-                              notifier.setFilterFolder(selected ? folder : null),
-                        ),
-                      )),
+                  ...state.availableFolders.map(
+                    (folder) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(folder),
+                        selected: state.filterFolder == folder,
+                        onSelected: (selected) =>
+                            notifier.setFilterFolder(selected ? folder : null),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -136,74 +147,82 @@ class LibraryScreen extends ConsumerWidget {
                     child: Text('No documents matching your filter.'),
                   )
                 : state.isGridView
-                    ? GridView.builder(
-                        padding: const EdgeInsets.all(16),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                ? GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
                           maxCrossAxisExtent: 200,
                           childAspectRatio: 0.8,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
                         ),
-                        itemCount: state.visibleDocuments.length,
-                        itemBuilder: (context, index) {
-                          final doc = state.visibleDocuments[index];
-                          final isSelected = state.selectedIds.contains(doc.id);
-                          return _LibraryGridCard(
-                            doc: doc,
-                            isSelected: isSelected,
-                            onTap: () {
-                              if (isMultiSelect) {
-                                notifier.toggleSelect(doc.id);
-                              } else {
-                                _openDocument(context, doc);
-                              }
-                            },
-                            onLongPress: () => notifier.toggleSelect(doc.id),
-                            onMore: () => _showDocumentActions(context, doc, notifier),
-                          );
+                    itemCount: state.visibleDocuments.length,
+                    itemBuilder: (context, index) {
+                      final doc = state.visibleDocuments[index];
+                      final isSelected = state.selectedIds.contains(doc.id);
+                      return _LibraryGridCard(
+                        doc: doc,
+                        isSelected: isSelected,
+                        onTap: () {
+                          if (isMultiSelect) {
+                            notifier.toggleSelect(doc.id);
+                          } else {
+                            _openDocument(context, ref, doc);
+                          }
                         },
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: state.visibleDocuments.length,
-                        itemBuilder: (context, index) {
-                          final doc = state.visibleDocuments[index];
-                          final isSelected = state.selectedIds.contains(doc.id);
-                          return _LibraryListTile(
-                            doc: doc,
-                            isSelected: isSelected,
-                            onTap: () {
-                              if (isMultiSelect) {
-                                notifier.toggleSelect(doc.id);
-                              } else {
-                                _openDocument(context, doc);
-                              }
-                            },
-                            onLongPress: () => notifier.toggleSelect(doc.id),
-                            onMore: () => _showDocumentActions(context, doc, notifier),
-                          );
+                        onLongPress: () => notifier.toggleSelect(doc.id),
+                        onMore: () =>
+                            _showDocumentActions(context, doc, notifier),
+                      );
+                    },
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: state.visibleDocuments.length,
+                    itemBuilder: (context, index) {
+                      final doc = state.visibleDocuments[index];
+                      final isSelected = state.selectedIds.contains(doc.id);
+                      return _LibraryListTile(
+                        doc: doc,
+                        isSelected: isSelected,
+                        onTap: () {
+                          if (isMultiSelect) {
+                            notifier.toggleSelect(doc.id);
+                          } else {
+                            _openDocument(context, ref, doc);
+                          }
                         },
-                      ),
+                        onLongPress: () => notifier.toggleSelect(doc.id),
+                        onMore: () =>
+                            _showDocumentActions(context, doc, notifier),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
     );
   }
 
-  void _openDocument(BuildContext context, DocumentMeta doc) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ReaderScreen(
-          params: ReaderNotifierParams(
-            id: doc.id,
-            name: doc.name,
-            path: doc.path,
-            initialPage: doc.lastPageRead,
-            initialPageCount: doc.totalPages,
+  void _openDocument(BuildContext context, WidgetRef ref, DocumentMeta doc) {
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
+    if (isDesktop) {
+      ref.read(documentTabsNotifierProvider.notifier).openTab(doc);
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ReaderScreen(
+            params: ReaderNotifierParams(
+              id: doc.id,
+              name: doc.name,
+              path: doc.path,
+              initialPage: doc.lastPageRead,
+              initialPageCount: doc.totalPages,
+            ),
           ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   void _confirmBatchDelete(BuildContext context, LibraryNotifier notifier) {
@@ -267,7 +286,9 @@ class LibraryScreen extends ConsumerWidget {
                 doc.isFavorite ? Icons.star_border : Icons.star,
                 color: Colors.amber,
               ),
-              title: Text(doc.isFavorite ? 'Remove Favorite' : 'Add to Favorites'),
+              title: Text(
+                doc.isFavorite ? 'Remove Favorite' : 'Add to Favorites',
+              ),
               onTap: () {
                 Navigator.of(ctx).pop();
                 notifier.toggleFavorite(doc.id);
@@ -282,8 +303,14 @@ class LibraryScreen extends ConsumerWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
-              title: const Text('Remove from Library', style: TextStyle(color: Colors.redAccent)),
+              leading: const Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+              ),
+              title: const Text(
+                'Remove from Library',
+                style: TextStyle(color: Colors.redAccent),
+              ),
               onTap: () {
                 Navigator.of(ctx).pop();
                 notifier.deleteDocument(doc.id);
@@ -295,7 +322,11 @@ class LibraryScreen extends ConsumerWidget {
     );
   }
 
-  void _showRenameDialog(BuildContext context, DocumentMeta doc, LibraryNotifier notifier) {
+  void _showRenameDialog(
+    BuildContext context,
+    DocumentMeta doc,
+    LibraryNotifier notifier,
+  ) {
     final controller = TextEditingController(text: doc.name);
     showDialog<void>(
       context: context,
@@ -307,7 +338,10 @@ class LibraryScreen extends ConsumerWidget {
           decoration: const InputDecoration(labelText: 'Document Name'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () {
               Navigator.of(ctx).pop();
@@ -320,7 +354,11 @@ class LibraryScreen extends ConsumerWidget {
     );
   }
 
-  void _showFolderDialog(BuildContext context, DocumentMeta doc, LibraryNotifier notifier) {
+  void _showFolderDialog(
+    BuildContext context,
+    DocumentMeta doc,
+    LibraryNotifier notifier,
+  ) {
     final controller = TextEditingController(text: doc.folder ?? '');
     showDialog<void>(
       context: context,
@@ -335,7 +373,10 @@ class LibraryScreen extends ConsumerWidget {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () {
               Navigator.of(ctx).pop();
@@ -357,7 +398,10 @@ class LibraryScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Title: ${doc.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              'Title: ${doc.name}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Text('Size: ${doc.formattedSize}'),
             const SizedBox(height: 4),
@@ -365,11 +409,17 @@ class LibraryScreen extends ConsumerWidget {
             const SizedBox(height: 4),
             Text('Last Page Read: ${doc.lastPageRead}'),
             const SizedBox(height: 4),
-            Text('Path: ${doc.path}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            Text(
+              'Path: ${doc.path}',
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
         ],
       ),
     );
@@ -400,7 +450,9 @@ class _LibraryGridCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isSelected ? Colors.blueAccent : (isDark ? Colors.white12 : Colors.black12),
+          color: isSelected
+              ? Colors.blueAccent
+              : (isDark ? Colors.white12 : Colors.black12),
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -415,12 +467,20 @@ class _LibraryGridCard extends StatelessWidget {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    const Icon(Icons.picture_as_pdf, size: 44, color: Colors.redAccent),
+                    const Icon(
+                      Icons.picture_as_pdf,
+                      size: 44,
+                      color: Colors.redAccent,
+                    ),
                     if (isSelected)
                       const Positioned(
                         top: 8,
                         left: 8,
-                        child: Icon(Icons.check_circle, color: Colors.blueAccent, size: 22),
+                        child: Icon(
+                          Icons.check_circle,
+                          color: Colors.blueAccent,
+                          size: 22,
+                        ),
                       ),
                     Positioned(
                       top: 4,
@@ -443,7 +503,10 @@ class _LibraryGridCard extends StatelessWidget {
                     doc.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(

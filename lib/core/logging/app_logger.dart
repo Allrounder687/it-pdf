@@ -15,7 +15,8 @@ class AppLogger {
   }
 
   /// Alias for warning events.
-  static void warn(String message, [String name = 'IT_PDF']) => warning(message, name);
+  static void warn(String message, [String name = 'IT_PDF']) =>
+      warning(message, name);
 
   /// Logs error events with error details and stack trace.
   static void error(

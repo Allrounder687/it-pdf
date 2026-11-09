@@ -7,11 +7,7 @@ class SignaturePoint {
   final double y;
   final double pressure;
 
-  const SignaturePoint({
-    required this.x,
-    required this.y,
-    this.pressure = 1.0,
-  });
+  const SignaturePoint({required this.x, required this.y, this.pressure = 1.0});
 
   Map<String, dynamic> toMap() => {'x': x, 'y': y, 'p': pressure};
 
@@ -58,14 +54,18 @@ class SignatureProfile {
     final rawStrokes = map['strokes'] as List? ?? const [];
     final parsedStrokes = rawStrokes.map((s) {
       final points = s as List? ?? const [];
-      return points.map((p) => SignaturePoint.fromMap(p as Map<String, dynamic>)).toList();
+      return points
+          .map((p) => SignaturePoint.fromMap(p as Map<String, dynamic>))
+          .toList();
     }).toList();
 
     return SignatureProfile(
       id: map['id'] as String,
       name: map['name'] as String,
       strokes: parsedStrokes,
-      createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+          DateTime.now(),
       colorValue: (map['colorValue'] as num?)?.toInt() ?? 0xFF000000,
     );
   }

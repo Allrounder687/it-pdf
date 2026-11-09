@@ -5,15 +5,15 @@ import 'package:it_pdf/core/providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('IT PDF app launches and renders home screen', (WidgetTester tester) async {
+  testWidgets('IT PDF app launches and renders home screen', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          sharedPreferencesProvider.overrideWithValue(prefs),
-        ],
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
         child: const ItPdfApp(),
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/document_meta.dart';
 import '../../library/domain/library_notifier.dart';
+import '../../reader/domain/document_tabs_notifier.dart';
 import '../../reader/domain/reader_notifier.dart';
 import '../../reader/presentation/reader_screen.dart';
 
@@ -16,7 +17,9 @@ class HomeScreen extends ConsumerWidget {
 
     final recents = state.recentDocuments;
     final continueDoc = recents.isNotEmpty ? recents.first : null;
-    final otherRecents = recents.length > 1 ? recents.sublist(1) : <DocumentMeta>[];
+    final otherRecents = recents.length > 1
+        ? recents.sublist(1)
+        : <DocumentMeta>[];
     final favorites = state.favoriteDocuments;
 
     return Scaffold(
@@ -27,7 +30,10 @@ class HomeScreen extends ConsumerWidget {
             SizedBox(width: 8),
             Text(
               'IT PDF',
-              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: -0.5),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: -0.5,
+              ),
             ),
           ],
         ),
@@ -45,18 +51,24 @@ class HomeScreen extends ConsumerWidget {
           : RefreshIndicator(
               onRefresh: () => notifier.loadLibrary(),
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
                 children: [
                   // Continue Reading Hero Card
                   if (continueDoc != null) ...[
                     const Text(
                       'Continue Reading',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _ContinueReadingCard(
                       doc: continueDoc,
-                      onOpen: () => _openDocument(context, continueDoc),
+                      onOpen: () => _openDocument(context, ref, continueDoc),
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -65,14 +77,19 @@ class HomeScreen extends ConsumerWidget {
                   if (otherRecents.isNotEmpty) ...[
                     const Text(
                       'Recent Documents',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    ...otherRecents.map((doc) => _RecentDocListTile(
-                          doc: doc,
-                          onOpen: () => _openDocument(context, doc),
-                          onToggleFavorite: () => notifier.toggleFavorite(doc.id),
-                        )),
+                    ...otherRecents.map(
+                      (doc) => _RecentDocListTile(
+                        doc: doc,
+                        onOpen: () => _openDocument(context, ref, doc),
+                        onToggleFavorite: () => notifier.toggleFavorite(doc.id),
+                      ),
+                    ),
                     const SizedBox(height: 24),
                   ],
 
@@ -80,14 +97,19 @@ class HomeScreen extends ConsumerWidget {
                   if (favorites.isNotEmpty) ...[
                     const Text(
                       'Favorites',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    ...favorites.map((doc) => _RecentDocListTile(
-                          doc: doc,
-                          onOpen: () => _openDocument(context, doc),
-                          onToggleFavorite: () => notifier.toggleFavorite(doc.id),
-                        )),
+                    ...favorites.map(
+                      (doc) => _RecentDocListTile(
+                        doc: doc,
+                        onOpen: () => _openDocument(context, ref, doc),
+                        onToggleFavorite: () => notifier.toggleFavorite(doc.id),
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -95,20 +117,25 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _openDocument(BuildContext context, DocumentMeta doc) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ReaderScreen(
-          params: ReaderNotifierParams(
-            id: doc.id,
-            name: doc.name,
-            path: doc.path,
-            initialPage: doc.lastPageRead,
-            initialPageCount: doc.totalPages,
+  void _openDocument(BuildContext context, WidgetRef ref, DocumentMeta doc) {
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
+    if (isDesktop) {
+      ref.read(documentTabsNotifierProvider.notifier).openTab(doc);
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ReaderScreen(
+            params: ReaderNotifierParams(
+              id: doc.id,
+              name: doc.name,
+              path: doc.path,
+              initialPage: doc.lastPageRead,
+              initialPageCount: doc.totalPages,
+            ),
           ),
         ),
-      ),
-    );
+      );
+    }
   }
 }
 
@@ -116,14 +143,13 @@ class _ContinueReadingCard extends StatelessWidget {
   final DocumentMeta doc;
   final VoidCallback onOpen;
 
-  const _ContinueReadingCard({
-    required this.doc,
-    required this.onOpen,
-  });
+  const _ContinueReadingCard({required this.doc, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
-    final progress = doc.totalPages > 0 ? (doc.lastPageRead / doc.totalPages).clamp(0.0, 1.0) : 0.0;
+    final progress = doc.totalPages > 0
+        ? (doc.lastPageRead / doc.totalPages).clamp(0.0, 1.0)
+        : 0.0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(
@@ -141,10 +167,16 @@ class _ContinueReadingCard extends StatelessWidget {
                   color: isDark ? const Color(0xFF161F30) : Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isDark ? const Color(0xFF334155) : Colors.blue.shade100,
+                    color: isDark
+                        ? const Color(0xFF334155)
+                        : Colors.blue.shade100,
                   ),
                 ),
-                child: const Icon(Icons.menu_book, color: Colors.blueAccent, size: 28),
+                child: const Icon(
+                  Icons.menu_book,
+                  color: Colors.blueAccent,
+                  size: 28,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -153,7 +185,10 @@ class _ContinueReadingCard extends StatelessWidget {
                   children: [
                     Text(
                       doc.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -168,8 +203,12 @@ class _ContinueReadingCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: progress,
                         minHeight: 6,
-                        backgroundColor: isDark ? Colors.white12 : Colors.grey.shade200,
-                        valueColor: const AlwaysStoppedAnimation(Colors.blueAccent),
+                        backgroundColor: isDark
+                            ? Colors.white12
+                            : Colors.grey.shade200,
+                        valueColor: const AlwaysStoppedAnimation(
+                          Colors.blueAccent,
+                        ),
                       ),
                     ),
                   ],
@@ -202,7 +241,10 @@ class _RecentDocListTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         onTap: onOpen,
-        leading: const Icon(Icons.picture_as_pdf_outlined, color: Colors.redAccent),
+        leading: const Icon(
+          Icons.picture_as_pdf_outlined,
+          color: Colors.redAccent,
+        ),
         title: Text(
           doc.name,
           maxLines: 1,

@@ -102,7 +102,10 @@ class ReaderAppBar extends StatelessWidget implements PreferredSizeWidget {
             children: [
               Text(
                 '$currentPage / $pageCount',
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
               ),
               const Icon(Icons.arrow_drop_down, size: 14),
             ],
@@ -209,8 +212,11 @@ class ReaderAppBar extends StatelessWidget implements PreferredSizeWidget {
             value: 'thumbnails',
             child: Row(
               children: [
-                Icon(Icons.view_carousel_outlined,
-                    color: showThumbnails ? Colors.blueAccent : null, size: 18),
+                Icon(
+                  Icons.view_carousel_outlined,
+                  color: showThumbnails ? Colors.blueAccent : null,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 const Text('Thumbnails Strip'),
               ],

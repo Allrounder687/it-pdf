@@ -48,7 +48,10 @@ class ReaderViewControls extends StatelessWidget {
               children: [
                 Text(
                   '$currentPage / $pageCount',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(width: 2),
                 const Icon(Icons.arrow_drop_down, size: 16),
@@ -73,14 +76,19 @@ class ReaderViewControls extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+              color: isDark
+                  ? Colors.white10
+                  : Colors.black.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Row(
               children: [
                 Text(
                   '$zoomPercent%',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
                 ),
                 const SizedBox(width: 2),
                 const Icon(Icons.arrow_drop_down, size: 16),

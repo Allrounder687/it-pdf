@@ -52,18 +52,13 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
 
   /// Start live stroke drawing.
   void startDrawing(NormalizedPoint point) {
-    state = state.copyWith(
-      isDrawing: true,
-      activePoints: [point],
-    );
+    state = state.copyWith(isDrawing: true, activePoints: [point]);
   }
 
   /// Append points to active stroke.
   void updateDrawing(NormalizedPoint point) {
     if (!state.isDrawing) return;
-    state = state.copyWith(
-      activePoints: [...state.activePoints, point],
-    );
+    state = state.copyWith(activePoints: [...state.activePoints, point]);
   }
 
   /// Finish stroke and convert to permanent annotation.
@@ -206,7 +201,9 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
 
   void _eraseNearbyAnnotations(int pageNumber, List<NormalizedPoint> points) {
     if (points.isEmpty) return;
-    final pageAnns = state.annotations.where((a) => a.pageNumber == pageNumber).toList();
+    final pageAnns = state.annotations
+        .where((a) => a.pageNumber == pageNumber)
+        .toList();
     final toDeleteIds = <String>{};
 
     for (final ann in pageAnns) {
@@ -223,7 +220,9 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
       } else {
         for (final p in points) {
           for (final annPt in ann.points) {
-            final distSq = (p.x - annPt.x) * (p.x - annPt.x) + (p.y - annPt.y) * (p.y - annPt.y);
+            final distSq =
+                (p.x - annPt.x) * (p.x - annPt.x) +
+                (p.y - annPt.y) * (p.y - annPt.y);
             if (distSq < 0.001) {
               toDeleteIds.add(ann.id);
               break;
@@ -236,7 +235,9 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
 
     if (toDeleteIds.isNotEmpty) {
       _pushUndoSnapshot();
-      final updated = state.annotations.where((a) => !toDeleteIds.contains(a.id)).toList();
+      final updated = state.annotations
+          .where((a) => !toDeleteIds.contains(a.id))
+          .toList();
       state = state.copyWith(annotations: updated, isDirty: true);
       _storage.saveAnnotations(documentId, updated);
     }
@@ -290,8 +291,10 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
   Future<void> undo() async {
     if (!state.canUndo) return;
     final previousState = state.undoStack.last;
-    final updatedUndo = List<List<Annotation>>.from(state.undoStack)..removeLast();
-    final updatedRedo = List<List<Annotation>>.from(state.redoStack)..add(state.annotations);
+    final updatedUndo = List<List<Annotation>>.from(state.undoStack)
+      ..removeLast();
+    final updatedRedo = List<List<Annotation>>.from(state.redoStack)
+      ..add(state.annotations);
 
     state = state.copyWith(
       annotations: previousState,
@@ -306,8 +309,10 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
   Future<void> redo() async {
     if (!state.canRedo) return;
     final nextState = state.redoStack.last;
-    final updatedRedo = List<List<Annotation>>.from(state.redoStack)..removeLast();
-    final updatedUndo = List<List<Annotation>>.from(state.undoStack)..add(state.annotations);
+    final updatedRedo = List<List<Annotation>>.from(state.redoStack)
+      ..removeLast();
+    final updatedUndo = List<List<Annotation>>.from(state.undoStack)
+      ..add(state.annotations);
 
     state = state.copyWith(
       annotations: nextState,
@@ -321,7 +326,10 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
   /// Permanently burns all draft annotations into the PDF file structure (ISO 32000).
   /// Once validation succeeds, marks annotations as committed so they are no longer
   /// rendered in the overlay widget, preventing double-rendering.
-  Future<bool> burnAnnotationsToFile(String sourceFilePath, String destinationPath) async {
+  Future<bool> burnAnnotationsToFile(
+    String sourceFilePath,
+    String destinationPath,
+  ) async {
     final toBurn = state.draftAnnotations;
     if (toBurn.isEmpty) {
       state = state.copyWith(isDirty: false);
@@ -336,7 +344,9 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
       );
 
       // Successfully burned: mark all as committed
-      final updated = state.annotations.map((a) => a.copyWith(isCommitted: true)).toList();
+      final updated = state.annotations
+          .map((a) => a.copyWith(isCommitted: true))
+          .toList();
       state = state.copyWith(annotations: updated, isDirty: false);
       await _storage.saveAnnotations(documentId, updated);
       return true;
@@ -346,7 +356,8 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
   }
 
   void _pushUndoSnapshot() {
-    final updatedUndo = List<List<Annotation>>.from(state.undoStack)..add(state.annotations);
+    final updatedUndo = List<List<Annotation>>.from(state.undoStack)
+      ..add(state.annotations);
     if (updatedUndo.length > 30) {
       updatedUndo.removeAt(0);
     }
@@ -355,5 +366,7 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
 }
 
 /// Family provider for AnnotationNotifier scoped to document ID.
-final annotationNotifierProvider = NotifierProvider.family<
-    AnnotationNotifier, AnnotationState, String>(AnnotationNotifier.new);
+final annotationNotifierProvider =
+    NotifierProvider.family<AnnotationNotifier, AnnotationState, String>(
+      AnnotationNotifier.new,
+    );

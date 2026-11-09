@@ -14,8 +14,8 @@ class PageOrganizerService {
   PageOrganizerService({
     SyncfusionPdfService? syncfusionService,
     SafeDocumentStorage? safeStorage,
-  })  : _syncfusionService = syncfusionService ?? SyncfusionPdfService(),
-        _safeStorage = safeStorage ?? SafeDocumentStorage();
+  }) : _syncfusionService = syncfusionService ?? SyncfusionPdfService(),
+       _safeStorage = safeStorage ?? SafeDocumentStorage();
 
   /// Convert an array of image files into a single multi-page PDF document.
   Future<String> convertImagesToPdf({
@@ -37,9 +37,7 @@ class PageOrganizerService {
           build: (context) {
             return pw.FullPage(
               ignoreMargins: true,
-              child: pw.Center(
-                child: pw.Image(image, fit: pw.BoxFit.contain),
-              ),
+              child: pw.Center(child: pw.Image(image, fit: pw.BoxFit.contain)),
             );
           },
         ),
@@ -116,13 +114,16 @@ class PageOrganizerService {
     required String outputPath,
   }) async {
     if (workspacePages.isEmpty) {
-      throw StateError('Cannot apply organizer changes: document must contain at least one page.');
+      throw StateError(
+        'Cannot apply organizer changes: document must contain at least one page.',
+      );
     }
 
     // Check if the page sequence is strictly a subset in original order (no reordering)
     bool isMonotonic = true;
     for (int i = 1; i < workspacePages.length; i++) {
-      if (workspacePages[i].originalPageNumber <= workspacePages[i - 1].originalPageNumber) {
+      if (workspacePages[i].originalPageNumber <=
+          workspacePages[i - 1].originalPageNumber) {
         isMonotonic = false;
         break;
       }
@@ -130,7 +131,9 @@ class PageOrganizerService {
 
     if (isMonotonic && workspacePages.length <= originalPageCount) {
       // 1. Determine deleted pages
-      final remainingOriginalNums = workspacePages.map((p) => p.originalPageNumber).toSet();
+      final remainingOriginalNums = workspacePages
+          .map((p) => p.originalPageNumber)
+          .toSet();
       final deletedPageNums = <int>[];
       for (int i = 1; i <= originalPageCount; i++) {
         if (!remainingOriginalNums.contains(i)) {

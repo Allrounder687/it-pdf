@@ -24,7 +24,11 @@ class PreferencesService {
           .map((item) => DocumentMeta.fromMap(item as Map<String, dynamic>))
           .toList();
     } catch (e, st) {
-      AppLogger.error('Failed to parse saved documents from disk', error: e, stackTrace: st);
+      AppLogger.error(
+        'Failed to parse saved documents from disk',
+        error: e,
+        stackTrace: st,
+      );
       return [];
     }
   }
@@ -35,7 +39,11 @@ class PreferencesService {
       final list = docs.map((d) => d.toMap()).toList();
       return await _prefs.setString(_documentsKey, jsonEncode(list));
     } catch (e, st) {
-      AppLogger.error('Failed to persist documents to disk', error: e, stackTrace: st);
+      AppLogger.error(
+        'Failed to persist documents to disk',
+        error: e,
+        stackTrace: st,
+      );
       return false;
     }
   }

@@ -23,7 +23,9 @@ void main() {
 
     test('rotates page by 90 degrees and wraps at 360', () {
       final container = ProviderContainer();
-      final notifier = container.read(pageOrganizerNotifierProvider(params).notifier);
+      final notifier = container.read(
+        pageOrganizerNotifierProvider(params).notifier,
+      );
 
       notifier.rotatePage(0, 90);
       var state = container.read(pageOrganizerNotifierProvider(params));
@@ -36,7 +38,9 @@ void main() {
 
     test('reorders page and updates relative current positions', () {
       final container = ProviderContainer();
-      final notifier = container.read(pageOrganizerNotifierProvider(params).notifier);
+      final notifier = container.read(
+        pageOrganizerNotifierProvider(params).notifier,
+      );
 
       // Move page 0 (original 1) to index 3
       notifier.reorderPage(0, 3);
@@ -49,7 +53,9 @@ void main() {
 
     test('selects and deletes selected pages', () {
       final container = ProviderContainer();
-      final notifier = container.read(pageOrganizerNotifierProvider(params).notifier);
+      final notifier = container.read(
+        pageOrganizerNotifierProvider(params).notifier,
+      );
 
       notifier.toggleSelect(1); // select page 2
       notifier.toggleSelect(3); // select page 4

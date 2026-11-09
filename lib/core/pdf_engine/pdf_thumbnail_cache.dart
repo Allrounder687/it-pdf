@@ -26,7 +26,11 @@ class PdfThumbnailCache {
       '$path:$pageNumber:$width';
 
   /// Get cached thumbnail bytes if present in memory.
-  Uint8List? getCachedThumbnail(String path, int pageNumber, {int width = 180}) {
+  Uint8List? getCachedThumbnail(
+    String path,
+    int pageNumber, {
+    int width = 180,
+  }) {
     final key = _cacheKey(path, pageNumber, width);
     if (_memoryCache.containsKey(key)) {
       // Move to back (most recently used)
@@ -242,7 +246,8 @@ class _PdfPageThumbnailViewState extends State<PdfPageThumbnailView> {
         height: widget.height,
       );
     } else if (_isLoading) {
-      child = widget.placeholder ??
+      child =
+          widget.placeholder ??
           Container(
             color: Colors.black12,
             child: const Center(

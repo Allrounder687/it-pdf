@@ -3,16 +3,21 @@
 class AiDocumentService {
   /// Generate a grounded executive summary of the document.
   String generateSummary(Map<int, String> pageTexts) {
-    if (pageTexts.isEmpty) return 'No readable text content extracted from document.';
+    if (pageTexts.isEmpty) {
+      return 'No readable text content extracted from document.';
+    }
 
     final totalWords = pageTexts.values.fold<int>(
       0,
-      (sum, text) => sum + text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length,
+      (sum, text) =>
+          sum + text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length,
     );
 
     final buffer = StringBuffer();
     buffer.writeln('📋 **Executive Document Summary**');
-    buffer.writeln('• **Scope:** ${pageTexts.length} pages, ~$totalWords total words analyzed.');
+    buffer.writeln(
+      '• **Scope:** ${pageTexts.length} pages, ~$totalWords total words analyzed.',
+    );
     buffer.writeln();
 
     for (final entry in pageTexts.entries) {
@@ -56,7 +61,10 @@ class AiDocumentService {
         // Find sentence containing the date
         final start = (m.start - 40).clamp(0, entry.value.length);
         final end = (m.end + 60).clamp(0, entry.value.length);
-        final snippet = entry.value.substring(start, end).replaceAll('\n', ' ').trim();
+        final snippet = entry.value
+            .substring(start, end)
+            .replaceAll('\n', ' ')
+            .trim();
         results.add('• **$dateStr** — "...$snippet..." **[Page $pageNum]**');
       }
     }

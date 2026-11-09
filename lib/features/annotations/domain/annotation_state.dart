@@ -17,7 +17,9 @@ class AnnotationState {
   const AnnotationState({
     this.annotations = const [],
     this.activeTool = AnnotationTool.none,
-    this.currentColor = const Color(0xFFFFEB3B), // Classic yellow highlight default
+    this.currentColor = const Color(
+      0xFFFFEB3B,
+    ), // Classic yellow highlight default
     this.currentStrokeWidth = 3.0,
     this.selectedAnnotationId,
     this.undoStack = const [],
@@ -42,7 +44,9 @@ class AnnotationState {
   /// Get only draft (uncommitted) annotations for a specific page,
   /// preventing already-burned PDF annotations from double-rendering.
   List<Annotation> draftAnnotationsForPage(int page) {
-    return annotations.where((a) => a.pageNumber == page && !a.isCommitted).toList();
+    return annotations
+        .where((a) => a.pageNumber == page && !a.isCommitted)
+        .toList();
   }
 
   AnnotationState copyWith({
@@ -63,7 +67,9 @@ class AnnotationState {
       activeTool: activeTool ?? this.activeTool,
       currentColor: currentColor ?? this.currentColor,
       currentStrokeWidth: currentStrokeWidth ?? this.currentStrokeWidth,
-      selectedAnnotationId: clearSelection ? null : (selectedAnnotationId ?? this.selectedAnnotationId),
+      selectedAnnotationId: clearSelection
+          ? null
+          : (selectedAnnotationId ?? this.selectedAnnotationId),
       undoStack: undoStack ?? this.undoStack,
       redoStack: redoStack ?? this.redoStack,
       isDirty: isDirty ?? this.isDirty,

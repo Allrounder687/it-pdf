@@ -27,7 +27,8 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
     super.initState();
     _messages.add(
       const _ChatMessage(
-        text: '👋 Hello! I am your grounded **IT PDF Assistant**. Ask any question about this document, or tap a quick action below.',
+        text:
+            '👋 Hello! I am your grounded **IT PDF Assistant**. Ask any question about this document, or tap a quick action below.',
         isUser: false,
       ),
     );
@@ -176,7 +177,10 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                   SizedBox(width: 8),
-                  Text('Analyzing document text...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    'Analyzing document text...',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ],
               ),
             ),
@@ -202,7 +206,10 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
                         ),
                         filled: true,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                       ),
                       onSubmitted: (_) => _handleSend(),
                     ),
@@ -233,10 +240,7 @@ class _MessageBubble extends StatelessWidget {
   final _ChatMessage message;
   final ValueChanged<int> onJumpToPage;
 
-  const _MessageBubble({
-    required this.message,
-    required this.onJumpToPage,
-  });
+  const _MessageBubble({required this.message, required this.onJumpToPage});
 
   @override
   Widget build(BuildContext context) {
@@ -247,7 +251,9 @@ class _MessageBubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.all(12),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
+        ),
         decoration: BoxDecoration(
           color: message.isUser
               ? Colors.blueAccent
@@ -257,7 +263,9 @@ class _MessageBubble extends StatelessWidget {
         child: SelectableText(
           message.text,
           style: TextStyle(
-            color: message.isUser ? Colors.white : (isDark ? Colors.white : Colors.black87),
+            color: message.isUser
+                ? Colors.white
+                : (isDark ? Colors.white : Colors.black87),
             fontSize: 13,
             height: 1.4,
           ),

@@ -7,10 +7,7 @@ import '../domain/annotation_notifier.dart';
 class AnnotationToolbar extends ConsumerWidget {
   final String documentId;
 
-  const AnnotationToolbar({
-    super.key,
-    required this.documentId,
-  });
+  const AnnotationToolbar({super.key, required this.documentId});
 
   static const List<Color> _palette = [
     Color(0xFFFFEB3B), // Yellow
@@ -43,7 +40,9 @@ class AnnotationToolbar extends ConsumerWidget {
               IconButton(
                 icon: Icon(
                   Icons.pan_tool_outlined,
-                  color: state.activeTool == AnnotationTool.none ? Colors.blue : null,
+                  color: state.activeTool == AnnotationTool.none
+                      ? Colors.blue
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Navigation Mode',
@@ -55,7 +54,9 @@ class AnnotationToolbar extends ConsumerWidget {
               IconButton(
                 icon: Icon(
                   Icons.edit_outlined,
-                  color: state.activeTool == AnnotationTool.pen ? Colors.blue : null,
+                  color: state.activeTool == AnnotationTool.pen
+                      ? Colors.blue
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Pen',
@@ -66,40 +67,51 @@ class AnnotationToolbar extends ConsumerWidget {
               IconButton(
                 icon: Icon(
                   Icons.border_color_outlined,
-                  color: state.activeTool == AnnotationTool.highlighter ? Colors.blue : null,
+                  color: state.activeTool == AnnotationTool.highlighter
+                      ? Colors.blue
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Highlighter',
-                onPressed: () => notifier.setActiveTool(AnnotationTool.highlighter),
+                onPressed: () =>
+                    notifier.setActiveTool(AnnotationTool.highlighter),
               ),
 
               // Underline
               IconButton(
                 icon: Icon(
                   Icons.format_underlined,
-                  color: state.activeTool == AnnotationTool.underline ? Colors.blue : null,
+                  color: state.activeTool == AnnotationTool.underline
+                      ? Colors.blue
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Underline',
-                onPressed: () => notifier.setActiveTool(AnnotationTool.underline),
+                onPressed: () =>
+                    notifier.setActiveTool(AnnotationTool.underline),
               ),
 
               // Strikethrough
               IconButton(
                 icon: Icon(
                   Icons.format_strikethrough,
-                  color: state.activeTool == AnnotationTool.strikethrough ? Colors.blue : null,
+                  color: state.activeTool == AnnotationTool.strikethrough
+                      ? Colors.blue
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Strikethrough',
-                onPressed: () => notifier.setActiveTool(AnnotationTool.strikethrough),
+                onPressed: () =>
+                    notifier.setActiveTool(AnnotationTool.strikethrough),
               ),
 
               // Arrow
               IconButton(
                 icon: Icon(
                   Icons.arrow_right_alt,
-                  color: state.activeTool == AnnotationTool.arrow ? Colors.blue : null,
+                  color: state.activeTool == AnnotationTool.arrow
+                      ? Colors.blue
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Arrow',
@@ -110,18 +122,23 @@ class AnnotationToolbar extends ConsumerWidget {
               IconButton(
                 icon: Icon(
                   Icons.crop_square,
-                  color: state.activeTool == AnnotationTool.rectangle ? Colors.blue : null,
+                  color: state.activeTool == AnnotationTool.rectangle
+                      ? Colors.blue
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Rectangle',
-                onPressed: () => notifier.setActiveTool(AnnotationTool.rectangle),
+                onPressed: () =>
+                    notifier.setActiveTool(AnnotationTool.rectangle),
               ),
 
               // Circle
               IconButton(
                 icon: Icon(
                   Icons.circle_outlined,
-                  color: state.activeTool == AnnotationTool.circle ? Colors.blue : null,
+                  color: state.activeTool == AnnotationTool.circle
+                      ? Colors.blue
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Circle',
@@ -132,18 +149,23 @@ class AnnotationToolbar extends ConsumerWidget {
               IconButton(
                 icon: Icon(
                   Icons.sticky_note_2_outlined,
-                  color: state.activeTool == AnnotationTool.stickyNote ? Colors.blue : null,
+                  color: state.activeTool == AnnotationTool.stickyNote
+                      ? Colors.blue
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Sticky Note',
-                onPressed: () => notifier.setActiveTool(AnnotationTool.stickyNote),
+                onPressed: () =>
+                    notifier.setActiveTool(AnnotationTool.stickyNote),
               ),
 
               // Eraser
               IconButton(
                 icon: Icon(
                   Icons.auto_fix_normal_outlined,
-                  color: state.activeTool == AnnotationTool.eraser ? Colors.redAccent : null,
+                  color: state.activeTool == AnnotationTool.eraser
+                      ? Colors.redAccent
+                      : null,
                   size: 20,
                 ),
                 tooltip: 'Eraser',
@@ -156,7 +178,8 @@ class AnnotationToolbar extends ConsumerWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: _palette.map((color) {
-                  final isSelected = state.currentColor.toARGB32() == color.toARGB32();
+                  final isSelected =
+                      state.currentColor.toARGB32() == color.toARGB32();
                   return InkWell(
                     onTap: () => notifier.setColor(color),
                     child: Container(
@@ -167,7 +190,9 @@ class AnnotationToolbar extends ConsumerWidget {
                         color: color,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: isSelected ? Colors.white : Colors.grey.shade400,
+                          color: isSelected
+                              ? Colors.white
+                              : Colors.grey.shade400,
                           width: isSelected ? 2.5 : 1,
                         ),
                         boxShadow: isSelected
@@ -176,7 +201,7 @@ class AnnotationToolbar extends ConsumerWidget {
                                   color: color.withValues(alpha: 0.6),
                                   blurRadius: 4,
                                   spreadRadius: 1,
-                                )
+                                ),
                               ]
                             : null,
                       ),

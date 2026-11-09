@@ -88,12 +88,16 @@ class DocumentMeta {
       name: map['name'] as String,
       path: map['path'] as String,
       sizeInBytes: (map['sizeInBytes'] as num?)?.toInt() ?? 0,
-      lastOpened: DateTime.tryParse(map['lastOpened'] as String? ?? '') ?? DateTime.now(),
+      lastOpened:
+          DateTime.tryParse(map['lastOpened'] as String? ?? '') ??
+          DateTime.now(),
       lastPageRead: (map['lastPageRead'] as num?)?.toInt() ?? 1,
       totalPages: (map['totalPages'] as num?)?.toInt() ?? 1,
       isFavorite: map['isFavorite'] as bool? ?? false,
       folder: map['folder'] as String?,
-      createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+          DateTime.now(),
       tags: List<String>.from(map['tags'] as List? ?? const []),
     );
   }

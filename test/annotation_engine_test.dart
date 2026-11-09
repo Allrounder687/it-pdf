@@ -44,10 +44,7 @@ void main() {
         colorValue: 0xFFFFEB3B,
         strokeWidth: 16.0,
         opacity: 0.45,
-        points: const [
-          NormalizedPoint(0.1, 0.1),
-          NormalizedPoint(0.5, 0.1),
-        ],
+        points: const [NormalizedPoint(0.1, 0.1), NormalizedPoint(0.5, 0.1)],
         createdAt: DateTime.now(),
       );
 

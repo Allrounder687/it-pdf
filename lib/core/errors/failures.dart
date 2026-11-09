@@ -6,7 +6,8 @@ sealed class Failure {
   const Failure(this.message, [this.cause]);
 
   @override
-  String toString() => '$runtimeType: $message${cause != null ? ' (Cause: $cause)' : ''}';
+  String toString() =>
+      '$runtimeType: $message${cause != null ? ' (Cause: $cause)' : ''}';
 }
 
 /// Document loading or decoding failure.

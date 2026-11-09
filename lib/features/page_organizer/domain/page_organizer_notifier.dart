@@ -48,10 +48,7 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
   PageOrganizerState build() {
     final list = List.generate(
       params.pageCount,
-      (i) => PageItem(
-        originalPageNumber: i + 1,
-        currentPosition: i,
-      ),
+      (i) => PageItem(originalPageNumber: i + 1, currentPosition: i),
     );
     return PageOrganizerState(
       documentPath: params.path,
@@ -62,7 +59,8 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
   }
 
   void _pushUndoSnapshot() {
-    final updatedUndo = List<List<PageItem>>.from(state.undoStack)..add(state.pages);
+    final updatedUndo = List<List<PageItem>>.from(state.undoStack)
+      ..add(state.pages);
     if (updatedUndo.length > 25) {
       updatedUndo.removeAt(0);
     }
@@ -72,18 +70,24 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
   void toggleSelect(int index) {
     final updated = List<PageItem>.from(state.pages);
     if (index >= 0 && index < updated.length) {
-      updated[index] = updated[index].copyWith(isSelected: !updated[index].isSelected);
+      updated[index] = updated[index].copyWith(
+        isSelected: !updated[index].isSelected,
+      );
       state = state.copyWith(pages: updated);
     }
   }
 
   void selectAll() {
-    final updated = state.pages.map((p) => p.copyWith(isSelected: true)).toList();
+    final updated = state.pages
+        .map((p) => p.copyWith(isSelected: true))
+        .toList();
     state = state.copyWith(pages: updated);
   }
 
   void clearSelection() {
-    final updated = state.pages.map((p) => p.copyWith(isSelected: false)).toList();
+    final updated = state.pages
+        .map((p) => p.copyWith(isSelected: false))
+        .toList();
     state = state.copyWith(pages: updated);
   }
 
@@ -135,7 +139,9 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
     if (state.selectedPages.isEmpty) return;
     if (state.selectedPages.length == state.pages.length) {
       // Prevent deleting ALL pages
-      state = state.copyWith(errorMessage: 'A PDF document must contain at least one page.');
+      state = state.copyWith(
+        errorMessage: 'A PDF document must contain at least one page.',
+      );
       return;
     }
 
@@ -180,8 +186,10 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
   void undo() {
     if (!state.canUndo) return;
     final previousPages = state.undoStack.last;
-    final updatedUndo = List<List<PageItem>>.from(state.undoStack)..removeLast();
-    final updatedRedo = List<List<PageItem>>.from(state.redoStack)..add(state.pages);
+    final updatedUndo = List<List<PageItem>>.from(state.undoStack)
+      ..removeLast();
+    final updatedRedo = List<List<PageItem>>.from(state.redoStack)
+      ..add(state.pages);
 
     state = state.copyWith(
       pages: previousPages,
@@ -194,8 +202,10 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
   void redo() {
     if (!state.canRedo) return;
     final nextPages = state.redoStack.last;
-    final updatedRedo = List<List<PageItem>>.from(state.redoStack)..removeLast();
-    final updatedUndo = List<List<PageItem>>.from(state.undoStack)..add(state.pages);
+    final updatedRedo = List<List<PageItem>>.from(state.redoStack)
+      ..removeLast();
+    final updatedUndo = List<List<PageItem>>.from(state.undoStack)
+      ..add(state.pages);
 
     state = state.copyWith(
       pages: nextPages,
@@ -208,10 +218,7 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
   void cancelChanges() {
     final list = List.generate(
       params.pageCount,
-      (i) => PageItem(
-        originalPageNumber: i + 1,
-        currentPosition: i,
-      ),
+      (i) => PageItem(originalPageNumber: i + 1, currentPosition: i),
     );
     state = state.copyWith(
       pages: list,
@@ -225,11 +232,16 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
   Future<bool> applyChanges() async {
     if (!state.isDirty) return true;
     if (state.pages.isEmpty) {
-      state = state.copyWith(errorMessage: 'Cannot save document with 0 pages.');
+      state = state.copyWith(
+        errorMessage: 'Cannot save document with 0 pages.',
+      );
       return false;
     }
 
-    state = state.copyWith(isProcessing: true, statusMessage: 'Saving changes safely...');
+    state = state.copyWith(
+      isProcessing: true,
+      statusMessage: 'Saving changes safely...',
+    );
     try {
       await _service.applyOrganizerChanges(
         sourcePath: state.documentPath,
@@ -242,11 +254,9 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
       PdfThumbnailCache.instance.invalidateDocument(state.documentPath);
 
       // Update library progress
-      await ref.read(libraryNotifierProvider.notifier).updateReadingProgress(
-            state.documentId,
-            1,
-            state.pages.length,
-          );
+      await ref
+          .read(libraryNotifierProvider.notifier)
+          .updateReadingProgress(state.documentId, 1, state.pages.length);
 
       state = state.copyWith(
         isProcessing: false,
@@ -267,7 +277,10 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
     final selected = state.selectedPages;
     if (selected.isEmpty) return false;
 
-    state = state.copyWith(isProcessing: true, statusMessage: 'Exporting selected pages...');
+    state = state.copyWith(
+      isProcessing: true,
+      statusMessage: 'Exporting selected pages...',
+    );
     try {
       final pageNums = selected.map((p) => p.originalPageNumber).toList();
       final rotations = {
@@ -281,7 +294,10 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
         outputPath: outputPath,
       );
 
-      state = state.copyWith(isProcessing: false, statusMessage: 'Export successful!');
+      state = state.copyWith(
+        isProcessing: false,
+        statusMessage: 'Export successful!',
+      );
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -294,5 +310,9 @@ class PageOrganizerNotifier extends Notifier<PageOrganizerState> {
 }
 
 /// Family provider for PageOrganizerNotifier.
-final pageOrganizerNotifierProvider = NotifierProvider.family<
-    PageOrganizerNotifier, PageOrganizerState, PageOrganizerParams>(PageOrganizerNotifier.new);
+final pageOrganizerNotifierProvider =
+    NotifierProvider.family<
+      PageOrganizerNotifier,
+      PageOrganizerState,
+      PageOrganizerParams
+    >(PageOrganizerNotifier.new);

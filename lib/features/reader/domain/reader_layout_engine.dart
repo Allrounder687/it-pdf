@@ -34,7 +34,10 @@ class ReaderLayoutEngine {
   }
 
   /// Continuous vertical layout: scrolls vertically with horizontally centered pages.
-  static PdfPageLayout verticalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
+  static PdfPageLayout verticalPageLayout(
+    List<PdfPage> pages,
+    PdfViewerParams params,
+  ) {
     if (pages.isEmpty) {
       return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
     }
@@ -59,7 +62,10 @@ class ReaderLayoutEngine {
   }
 
   /// Continuous horizontal layout: scrolls horizontally with vertically centered pages.
-  static PdfPageLayout horizontalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
+  static PdfPageLayout horizontalPageLayout(
+    List<PdfPage> pages,
+    PdfViewerParams params,
+  ) {
     if (pages.isEmpty) {
       return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
     }
@@ -86,7 +92,10 @@ class ReaderLayoutEngine {
   /// Single page layout: arranges pages in discrete isolated viewport slots.
   /// Each slot reserves space for the largest page, centering smaller or rotated pages
   /// without overlapping adjacent page boundaries.
-  static PdfPageLayout singlePageLayout(List<PdfPage> pages, PdfViewerParams params) {
+  static PdfPageLayout singlePageLayout(
+    List<PdfPage> pages,
+    PdfViewerParams params,
+  ) {
     if (pages.isEmpty) {
       return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
     }
@@ -118,7 +127,10 @@ class ReaderLayoutEngine {
   ///   right page left-aligned to spine.
   /// - Trailing lone odd page (e.g. Page 4 in a 4-page book) is centered alone.
   /// - Row height accommodates the taller page of each facing pair without vertical overlap.
-  static PdfPageLayout twoPageSpreadLayout(List<PdfPage> pages, PdfViewerParams params) {
+  static PdfPageLayout twoPageSpreadLayout(
+    List<PdfPage> pages,
+    PdfViewerParams params,
+  ) {
     if (pages.isEmpty) {
       return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
     }
@@ -150,18 +162,33 @@ class ReaderLayoutEngine {
         // Left page spine alignment: right edge touches spine gutter
         final leftX = margin + (maxPageWidth - leftPage.width);
         final leftY = currentY + (rowHeight - leftPage.height) / 2;
-        pageLayouts[i] = Rect.fromLTWH(leftX, leftY, leftPage.width, leftPage.height);
+        pageLayouts[i] = Rect.fromLTWH(
+          leftX,
+          leftY,
+          leftPage.width,
+          leftPage.height,
+        );
 
         // Right page spine alignment: left edge touches spine gutter
         final rightX = margin * 2 + maxPageWidth;
         final rightY = currentY + (rowHeight - rightPage.height) / 2;
-        pageLayouts[i + 1] = Rect.fromLTWH(rightX, rightY, rightPage.width, rightPage.height);
+        pageLayouts[i + 1] = Rect.fromLTWH(
+          rightX,
+          rightY,
+          rightPage.width,
+          rightPage.height,
+        );
 
         currentY += rowHeight + margin;
       } else {
         // Lone trailing page: centered alone on its row
         final trailingX = (spreadWidth - leftPage.width) / 2;
-        pageLayouts[i] = Rect.fromLTWH(trailingX, currentY, leftPage.width, leftPage.height);
+        pageLayouts[i] = Rect.fromLTWH(
+          trailingX,
+          currentY,
+          leftPage.width,
+          leftPage.height,
+        );
         currentY += leftPage.height + margin;
       }
     }

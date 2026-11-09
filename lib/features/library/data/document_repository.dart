@@ -28,7 +28,10 @@ class DocumentRepository implements IDocumentRepository {
   }
 
   @override
-  Future<void> removeDocument(String id, {bool deleteSourceFile = false}) async {
+  Future<void> removeDocument(
+    String id, {
+    bool deleteSourceFile = false,
+  }) async {
     final docs = _preferencesService.loadDocuments();
     final targetIndex = docs.indexWhere((d) => d.id == id);
     if (targetIndex < 0) return;
@@ -45,7 +48,11 @@ class DocumentRepository implements IDocumentRepository {
           AppLogger.info('Source file removed: ${targetDoc.path}');
         }
       } catch (e, st) {
-        AppLogger.error('Failed to delete source file on disk', error: e, stackTrace: st);
+        AppLogger.error(
+          'Failed to delete source file on disk',
+          error: e,
+          stackTrace: st,
+        );
       }
     }
   }
@@ -61,7 +68,11 @@ class DocumentRepository implements IDocumentRepository {
   }
 
   @override
-  Future<void> updateReadingProgress(String id, int page, int totalPages) async {
+  Future<void> updateReadingProgress(
+    String id,
+    int page,
+    int totalPages,
+  ) async {
     final docs = _preferencesService.loadDocuments();
     final index = docs.indexWhere((d) => d.id == id);
     if (index >= 0) {

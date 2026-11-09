@@ -18,7 +18,10 @@ class ToolsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('PDF Tools', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'PDF Tools',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -26,31 +29,50 @@ class ToolsScreen extends ConsumerWidget {
           _ToolCard(
             icon: Icons.image_outlined,
             title: 'Images to PDF',
-            description: 'Convert photos, scans and gallery images into a single clean PDF document.',
+            description:
+                'Convert photos, scans and gallery images into a single clean PDF document.',
             color: Colors.blueAccent,
-            onTap: () => _handleImagesToPdf(context, filePicker, organizerService, libraryNotifier),
+            onTap: () => _handleImagesToPdf(
+              context,
+              filePicker,
+              organizerService,
+              libraryNotifier,
+            ),
           ),
           const SizedBox(height: 12),
           _ToolCard(
             icon: Icons.call_merge,
             title: 'Merge PDF Documents',
-            description: 'Combine multiple PDF files into one continuous compiled document.',
+            description:
+                'Combine multiple PDF files into one continuous compiled document.',
             color: Colors.teal,
-            onTap: () => _handleMergePdfs(context, filePicker, organizerService, libraryNotifier),
+            onTap: () => _handleMergePdfs(
+              context,
+              filePicker,
+              organizerService,
+              libraryNotifier,
+            ),
           ),
           const SizedBox(height: 12),
           _ToolCard(
             icon: Icons.note_add_outlined,
             title: 'Create Blank PDF',
-            description: 'Generate a new blank notebook or drafting document ready for annotation.',
+            description:
+                'Generate a new blank notebook or drafting document ready for annotation.',
             color: Colors.purpleAccent,
-            onTap: () => _handleCreateBlankPdf(context, filePicker, organizerService, libraryNotifier),
+            onTap: () => _handleCreateBlankPdf(
+              context,
+              filePicker,
+              organizerService,
+              libraryNotifier,
+            ),
           ),
           const SizedBox(height: 12),
           _ToolCard(
             icon: Icons.draw_outlined,
             title: 'Handwritten Signatures',
-            description: 'Draw, save and manage custom vector signatures for rapid document signing.',
+            description:
+                'Draw, save and manage custom vector signatures for rapid document signing.',
             color: Colors.orangeAccent,
             onTap: () => _handleSignaturePad(context),
           ),
@@ -81,14 +103,16 @@ class ToolsScreen extends ConsumerWidget {
       final doc = await libraryNotifier.importFileFromPath(dest);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Successfully created ${doc?.name ?? "PDF"}!')),
+          SnackBar(
+            content: Text('Successfully created ${doc?.name ?? "PDF"}!'),
+          ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Conversion failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Conversion failed: $e')));
       }
     }
   }
@@ -103,7 +127,9 @@ class ToolsScreen extends ConsumerWidget {
     if (files.length < 2) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select at least 2 PDF files to merge.')),
+          const SnackBar(
+            content: Text('Please select at least 2 PDF files to merge.'),
+          ),
         );
       }
       return;
@@ -115,21 +141,20 @@ class ToolsScreen extends ConsumerWidget {
     if (dest == null) return;
 
     try {
-      await organizerService.mergePdfs(
-        sourcePaths: files,
-        outputPath: dest,
-      );
+      await organizerService.mergePdfs(sourcePaths: files, outputPath: dest);
       final doc = await libraryNotifier.importFileFromPath(dest);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Successfully merged into ${doc?.name ?? "PDF"}!')),
+          SnackBar(
+            content: Text('Successfully merged into ${doc?.name ?? "PDF"}!'),
+          ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Merge failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Merge failed: $e')));
       }
     }
   }
@@ -150,8 +175,14 @@ class ToolsScreen extends ConsumerWidget {
           decoration: const InputDecoration(labelText: 'Document Title'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Create')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Create'),
+          ),
         ],
       ),
     );
@@ -176,9 +207,9 @@ class ToolsScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Creation failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Creation failed: $e')));
       }
     }
   }
@@ -189,9 +220,9 @@ class ToolsScreen extends ConsumerWidget {
       builder: (ctx) => const SignaturePadDialog(),
     );
     if (result != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Signature profile saved!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Signature profile saved!')));
     }
   }
 }
@@ -237,7 +268,10 @@ class _ToolCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(

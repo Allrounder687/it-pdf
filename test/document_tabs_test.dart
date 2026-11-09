@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:it_pdf/features/reader/domain/document_tab.dart';
 import 'package:it_pdf/features/reader/domain/document_tabs_notifier.dart';
 import 'package:it_pdf/shared/models/document_meta.dart';
 
@@ -75,18 +74,21 @@ void main() {
       expect(state.activeTab?.id, 'doc_2');
     });
 
-    test('openTab on already open document switches to existing tab without duplicating', () {
-      final notifier = container.read(documentTabsNotifierProvider.notifier);
-      notifier.openTab(doc1);
-      notifier.openTab(doc2);
+    test(
+      'openTab on already open document switches to existing tab without duplicating',
+      () {
+        final notifier = container.read(documentTabsNotifierProvider.notifier);
+        notifier.openTab(doc1);
+        notifier.openTab(doc2);
 
-      // Re-open doc1
-      notifier.openTab(doc1);
-      final state = container.read(documentTabsNotifierProvider);
-      expect(state.openTabs.length, 2);
-      expect(state.activeIndex, 0);
-      expect(state.activeTab?.id, 'doc_1');
-    });
+        // Re-open doc1
+        notifier.openTab(doc1);
+        final state = container.read(documentTabsNotifierProvider);
+        expect(state.openTabs.length, 2);
+        expect(state.activeIndex, 0);
+        expect(state.activeTab?.id, 'doc_1');
+      },
+    );
 
     test('closeTab adjusts activeIndex and preserves recentlyClosedTabs', () {
       final notifier = container.read(documentTabsNotifierProvider.notifier);

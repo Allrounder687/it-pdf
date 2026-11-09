@@ -59,7 +59,9 @@ class ThumbnailStrip extends StatelessWidget {
                 children: [
                   Expanded(
                     child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(5),
+                      ),
                       child: documentPath != null
                           ? PdfPageThumbnailView(
                               documentPath: documentPath!,
@@ -71,7 +73,9 @@ class ThumbnailStrip extends StatelessWidget {
                                   '$pageNum',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: isSelected ? Colors.blueAccent : Colors.grey,
+                                    color: isSelected
+                                        ? Colors.blueAccent
+                                        : Colors.grey,
                                   ),
                                 ),
                               ),
@@ -80,7 +84,9 @@ class ThumbnailStrip extends StatelessWidget {
                               child: Icon(
                                 Icons.description_outlined,
                                 size: 20,
-                                color: isSelected ? Colors.blueAccent : Colors.grey,
+                                color: isSelected
+                                    ? Colors.blueAccent
+                                    : Colors.grey,
                               ),
                             ),
                     ),
@@ -94,7 +100,9 @@ class ThumbnailStrip extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 10,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                         color: isSelected ? Colors.blueAccent : null,
                       ),
                     ),

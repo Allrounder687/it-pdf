@@ -20,7 +20,11 @@ class SignatureRepository {
           .map((item) => SignatureProfile.fromMap(item as Map<String, dynamic>))
           .toList();
     } catch (e, st) {
-      AppLogger.error('Failed to load user signatures', error: e, stackTrace: st);
+      AppLogger.error(
+        'Failed to load user signatures',
+        error: e,
+        stackTrace: st,
+      );
       return [];
     }
   }
@@ -38,7 +42,11 @@ class SignatureRepository {
       final jsonList = current.map((p) => p.toMap()).toList();
       return await _prefs.setString(_storageKey, jsonEncode(jsonList));
     } catch (e, st) {
-      AppLogger.error('Failed to save signature profile', error: e, stackTrace: st);
+      AppLogger.error(
+        'Failed to save signature profile',
+        error: e,
+        stackTrace: st,
+      );
       return false;
     }
   }

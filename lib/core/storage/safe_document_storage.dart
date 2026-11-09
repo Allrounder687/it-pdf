@@ -65,7 +65,9 @@ class SafeDocumentStorage {
 
     // Check %%EOF marker near end of file
     final tailScanSize = bytes.length < 2048 ? bytes.length : 2048;
-    final tailSlice = String.fromCharCodes(bytes.sublist(bytes.length - tailScanSize));
+    final tailSlice = String.fromCharCodes(
+      bytes.sublist(bytes.length - tailScanSize),
+    );
     if (!tailSlice.contains('%%EOF')) {
       AppLogger.warn('PDF validation warning: missing %%EOF trailer marker');
     }
@@ -83,10 +85,16 @@ class SafeDocumentStorage {
     } catch (e, st) {
       final errStr = e.toString().toLowerCase();
       if (errStr.contains('password') || errStr.contains('encrypt')) {
-        AppLogger.info('PDF is password protected: verified valid encrypted PDF');
+        AppLogger.info(
+          'PDF is password protected: verified valid encrypted PDF',
+        );
         return true;
       }
-      AppLogger.error('PDF validation failed during structural parse', error: e, stackTrace: st);
+      AppLogger.error(
+        'PDF validation failed during structural parse',
+        error: e,
+        stackTrace: st,
+      );
       return false;
     } finally {
       testDoc?.dispose();
@@ -108,7 +116,10 @@ class SafeDocumentStorage {
   }) async {
     // 1. Structural pre-validation
     if (!validatePdfBytes(bytes, password: password)) {
-      return SaveResult.failure(targetPath, 'Validation failed: Invalid or corrupted PDF bytes.');
+      return SaveResult.failure(
+        targetPath,
+        'Validation failed: Invalid or corrupted PDF bytes.',
+      );
     }
 
     final targetFile = File(targetPath);
@@ -121,7 +132,10 @@ class SafeDocumentStorage {
     final tempPath = p.join(targetDir.path, tempFileName);
     final tempFile = File(tempPath);
 
-    final journalPath = p.join(targetDir.path, '.${p.basename(targetPath)}.journal');
+    final journalPath = p.join(
+      targetDir.path,
+      '.${p.basename(targetPath)}.journal',
+    );
     final journalFile = File(journalPath);
 
     String? backupPath;
@@ -134,14 +148,19 @@ class SafeDocumentStorage {
       // Verify written file size matches byte buffer
       final writtenLength = await tempFile.length();
       if (writtenLength != bytes.length) {
-        throw StateError('Written byte length mismatch ($writtenLength != ${bytes.length})');
+        throw StateError(
+          'Written byte length mismatch ($writtenLength != ${bytes.length})',
+        );
       }
 
       // 3. Handle backup if destination file already exists
       if (await targetFile.exists()) {
         if (createBackup) {
           final timestamp = DateTime.now().millisecondsSinceEpoch;
-          backupPath = p.join(targetDir.path, '.${p.basename(targetPath)}.bak_$timestamp');
+          backupPath = p.join(
+            targetDir.path,
+            '.${p.basename(targetPath)}.bak_$timestamp',
+          );
           backupFile = File(backupPath);
           await targetFile.copy(backupPath);
         }
@@ -158,25 +177,42 @@ class SafeDocumentStorage {
       }
 
       // 5. Safe replacement (handling Windows file locks and platform semantics)
-      await _safeReplaceFile(source: tempFile, destination: targetFile, backup: backupFile);
+      await _safeReplaceFile(
+        source: tempFile,
+        destination: targetFile,
+        backup: backupFile,
+      );
 
       // 6. Finalize transaction: remove recovery journal
       if (await journalFile.exists()) {
         await journalFile.delete();
       }
 
-      AppLogger.info('Transactional save completed successfully for: $targetPath');
+      AppLogger.info(
+        'Transactional save completed successfully for: $targetPath',
+      );
       return SaveResult.success(targetPath, backupPath: backupPath);
     } catch (e, st) {
-      AppLogger.error('Transactional save failed, recovering state', error: e, stackTrace: st);
+      AppLogger.error(
+        'Transactional save failed, recovering state',
+        error: e,
+        stackTrace: st,
+      );
 
       // If replacement failed, attempt restoration from backup
-      if (backupFile != null && await backupFile.exists() && !await targetFile.exists()) {
+      if (backupFile != null &&
+          await backupFile.exists() &&
+          !await targetFile.exists()) {
         try {
           await backupFile.copy(targetPath);
-          AppLogger.info('Successfully recovered original target from backup: $backupPath');
+          AppLogger.info(
+            'Successfully recovered original target from backup: $backupPath',
+          );
         } catch (recoverErr) {
-          AppLogger.error('Critical: Failed to restore backup', error: recoverErr);
+          AppLogger.error(
+            'Critical: Failed to restore backup',
+            error: recoverErr,
+          );
         }
       }
 
@@ -232,7 +268,9 @@ class SafeDocumentStorage {
       }
     } catch (e) {
       // If atomic rename fails (e.g. cross-volume, Windows sharing violation), fallback to copy
-      AppLogger.warn('Rename replacement failed ($e), falling back to streamed write replacement.');
+      AppLogger.warn(
+        'Rename replacement failed ($e), falling back to streamed write replacement.',
+      );
       final sourceBytes = await source.readAsBytes();
       await destination.writeAsBytes(sourceBytes, flush: true);
       if (await source.exists()) {
@@ -280,7 +318,10 @@ class SafeDocumentStorage {
 
             await entity.delete();
           } catch (journalErr) {
-            AppLogger.error('Failed processing recovery journal ${entity.path}', error: journalErr);
+            AppLogger.error(
+              'Failed processing recovery journal ${entity.path}',
+              error: journalErr,
+            );
           }
         }
       }
@@ -302,7 +343,8 @@ class SafeDocumentStorage {
       await for (final entity in dir.list()) {
         if (entity is File) {
           final name = p.basename(entity.path);
-          if (name.startsWith('.$base.work_') || name.startsWith('.$base.staging_')) {
+          if (name.startsWith('.$base.work_') ||
+              name.startsWith('.$base.staging_')) {
             try {
               await entity.delete();
             } catch (_) {}

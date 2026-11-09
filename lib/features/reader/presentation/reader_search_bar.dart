@@ -88,18 +88,26 @@ class _ReaderSearchBarState extends State<ReaderSearchBar> {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Text(
                   matchText,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             IconButton(
               icon: const Icon(Icons.keyboard_arrow_up, size: 20),
               tooltip: 'Previous Match',
-              onPressed: totalMatches > 0 ? () => widget.searcher.goToPrevMatch() : null,
+              onPressed: totalMatches > 0
+                  ? () => widget.searcher.goToPrevMatch()
+                  : null,
             ),
             IconButton(
               icon: const Icon(Icons.keyboard_arrow_down, size: 20),
               tooltip: 'Next Match',
-              onPressed: totalMatches > 0 ? () => widget.searcher.goToNextMatch() : null,
+              onPressed: totalMatches > 0
+                  ? () => widget.searcher.goToNextMatch()
+                  : null,
             ),
             IconButton(
               icon: const Icon(Icons.close, size: 18),

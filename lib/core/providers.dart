@@ -6,7 +6,9 @@ import 'storage/safe_document_storage.dart';
 
 /// Provider for global SharedPreferences instance.
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  throw UnimplementedError('SharedPreferences must be overridden in ProviderScope');
+  throw UnimplementedError(
+    'SharedPreferences must be overridden in ProviderScope',
+  );
 });
 
 /// Provider for PreferencesService.
@@ -29,5 +31,3 @@ final safeDocumentStorageProvider = Provider<SafeDocumentStorage>((ref) {
 final initialCliArgsProvider = Provider<List<String>>((ref) {
   return const [];
 });
-
-

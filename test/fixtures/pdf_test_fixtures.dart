@@ -15,11 +15,16 @@ class PdfTestFixtures {
     doc.documentInformation.title = 'IT PDF Forensic Test Suite';
     doc.documentInformation.author = 'IT PDF QA Verification Core';
     doc.documentInformation.subject = 'Comprehensive Structural Audit Fixture';
-    doc.documentInformation.keywords = 'forensics, acroforms, vectors, bookmarks';
+    doc.documentInformation.keywords =
+        'forensics, acroforms, vectors, bookmarks';
 
     // Page 1: Standard A4 Portrait (595.28 x 841.89 pt) - Vector graphics & text
     final page1 = doc.pages.add();
-    final fontTitle = sf.PdfStandardFont(sf.PdfFontFamily.helvetica, 18, style: sf.PdfFontStyle.bold);
+    final fontTitle = sf.PdfStandardFont(
+      sf.PdfFontFamily.helvetica,
+      18,
+      style: sf.PdfFontStyle.bold,
+    );
     final fontBody = sf.PdfStandardFont(sf.PdfFontFamily.helvetica, 12);
 
     page1.graphics.drawString(
@@ -38,7 +43,10 @@ class PdfTestFixtures {
 
     // Vector drawing: Rectangle, Bezier curve, line, and ellipse
     final pen = sf.PdfPen(sf.PdfColor(37, 99, 235), width: 2);
-    page1.graphics.drawRectangle(pen: pen, bounds: const Rect.fromLTWH(40, 120, 200, 100));
+    page1.graphics.drawRectangle(
+      pen: pen,
+      bounds: const Rect.fromLTWH(40, 120, 200, 100),
+    );
     page1.graphics.drawEllipse(
       const Rect.fromLTWH(260, 120, 120, 100),
       pen: sf.PdfPen(sf.PdfColor(16, 185, 129), width: 2),

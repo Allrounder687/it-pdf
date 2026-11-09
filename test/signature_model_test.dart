@@ -14,9 +14,7 @@ void main() {
             const SignaturePoint(x: 10.0, y: 15.0),
             const SignaturePoint(x: 20.0, y: 25.0),
           ],
-          [
-            const SignaturePoint(x: 30.0, y: 35.0),
-          ]
+          [const SignaturePoint(x: 30.0, y: 35.0)],
         ],
         createdAt: DateTime.now(),
         colorValue: 0xFF0D47A1,

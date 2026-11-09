@@ -53,7 +53,9 @@ void main() {
       expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
     });
 
-    testWidgets('renders mobile compact overflow layout on narrow screens', (tester) async {
+    testWidgets('renders mobile compact overflow layout on narrow screens', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
