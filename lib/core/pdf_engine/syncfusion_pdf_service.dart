@@ -91,28 +91,60 @@ class SyncfusionPdfService {
     final sourceDoc = sf.PdfDocument(inputBytes: bytes);
 
     try {
-      final selectedSet = pageNumbers.toSet();
-      // Remove pages that are NOT in the selection in descending order
-      for (int i = sourceDoc.pages.count - 1; i >= 0; i--) {
-        final pageNum = i + 1;
-        if (!selectedSet.contains(pageNum)) {
-          sourceDoc.pages.removeAt(i);
+      bool isMonotonic = true;
+      for (int i = 1; i < pageNumbers.length; i++) {
+        if (pageNumbers[i] <= pageNumbers[i - 1]) {
+          isMonotonic = false;
+          break;
         }
       }
 
-      // Apply rotations to remaining pages
-      for (int i = 0; i < sourceDoc.pages.count; i++) {
-        final originalPageNum = pageNumbers[i];
-        final rotDegrees = pageRotations[originalPageNum] ?? 0;
-        if (rotDegrees > 0) {
-          sourceDoc.pages[i].rotation = _mapRotation(rotDegrees);
+      Uint8List outputBytes;
+      if (isMonotonic && pageNumbers.toSet().length == pageNumbers.length) {
+        // Surgical in-place removal preserves 100% of fonts, AcroForms, bookmarks
+        final selectedSet = pageNumbers.toSet();
+        for (int i = sourceDoc.pages.count - 1; i >= 0; i--) {
+          final pageNum = i + 1;
+          if (!selectedSet.contains(pageNum)) {
+            sourceDoc.pages.removeAt(i);
+          }
+        }
+        for (int i = 0; i < sourceDoc.pages.count; i++) {
+          final originalPageNum = pageNumbers[i];
+          final rotDegrees = pageRotations[originalPageNum] ?? 0;
+          if (rotDegrees > 0) {
+            sourceDoc.pages[i].rotation = _mapRotation(rotDegrees);
+          }
+        }
+        outputBytes = Uint8List.fromList(sourceDoc.saveSync());
+      } else {
+        // Reordering or duplication requested: assemble into new document using templates
+        final newDoc = sf.PdfDocument();
+        try {
+          for (int i = 0; i < pageNumbers.length; i++) {
+            final pageNum = pageNumbers[i];
+            if (pageNum >= 1 && pageNum <= sourceDoc.pages.count) {
+              final srcPage = sourceDoc.pages[pageNum - 1];
+              final template = srcPage.createTemplate();
+              final section = newDoc.sections!.add();
+              section.pageSettings.size = srcPage.size;
+              final rotDegrees = pageRotations[pageNum] ?? 0;
+              if (rotDegrees > 0) {
+                section.pageSettings.rotate = _mapRotation(rotDegrees);
+              }
+              final newPage = section.pages.add();
+              newPage.graphics.drawPdfTemplate(template, const Offset(0, 0));
+            }
+          }
+          outputBytes = Uint8List.fromList(newDoc.saveSync());
+        } finally {
+          newDoc.dispose();
         }
       }
 
-      final outputBytes = sourceDoc.saveSync();
       final result = await _safeStorage.transactionalSaveBytes(
         targetPath: outputPath,
-        bytes: Uint8List.fromList(outputBytes),
+        bytes: outputBytes,
       );
       if (!result.isSuccess) {
         throw StateError(result.errorMessage ?? 'Extraction save failed');
@@ -411,6 +443,7 @@ class SyncfusionPdfService {
       final result = await _safeStorage.transactionalSaveBytes(
         targetPath: outputPath,
         bytes: Uint8List.fromList(outputBytes),
+        password: userPassword.isNotEmpty ? userPassword : ownerPassword,
       );
       if (!result.isSuccess) {
         throw StateError(result.errorMessage ?? 'Password protect save failed');

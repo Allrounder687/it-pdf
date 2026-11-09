@@ -162,7 +162,7 @@ class _FormFieldsDialogState extends State<FormFieldsDialog> {
                             border: const OutlineInputBorder(),
                             isDense: true,
                           ),
-                          value: options.contains(currentVal) ? currentVal : options.first,
+                          initialValue: options.contains(currentVal) ? currentVal : options.first,
                           items: options.map((opt) {
                             return DropdownMenuItem(value: opt, child: Text(opt));
                           }).toList(),
