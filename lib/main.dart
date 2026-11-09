@@ -5,7 +5,7 @@ import 'app/app.dart';
 import 'core/logging/app_logger.dart';
 import 'core/providers.dart';
 
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   AppLogger.info('Initializing IT PDF...');
@@ -15,6 +15,7 @@ void main() async {
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(sharedPreferences),
+        initialCliArgsProvider.overrideWithValue(args),
       ],
       child: const ItPdfApp(),
     ),

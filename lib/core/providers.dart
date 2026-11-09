@@ -25,3 +25,9 @@ final safeDocumentStorageProvider = Provider<SafeDocumentStorage>((ref) {
   return SafeDocumentStorage();
 });
 
+/// Provider for initial command-line arguments passed on app launch.
+final initialCliArgsProvider = Provider<List<String>>((ref) {
+  return const [];
+});
+
+

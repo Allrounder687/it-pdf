@@ -15,6 +15,7 @@ import '../../forms/presentation/form_fields_dialog.dart';
 import '../../page_organizer/domain/page_organizer_notifier.dart';
 import '../../page_organizer/presentation/page_organizer_screen.dart';
 import '../../security/presentation/password_protect_dialog.dart';
+import '../domain/reader_layout_engine.dart';
 import '../domain/reader_notifier.dart';
 import '../domain/reader_state.dart';
 import 'outline_drawer.dart';
@@ -38,107 +39,8 @@ class ReaderScreen extends ConsumerStatefulWidget {
     List<PdfPage> pages,
     PdfViewerParams params,
     ReaderLayout layout,
-  ) {
-    switch (layout) {
-      case ReaderLayout.continuousVertical:
-        return _verticalPageLayout(pages, params);
-      case ReaderLayout.continuousHorizontal:
-        return _horizontalPageLayout(pages, params);
-      case ReaderLayout.singlePage:
-        return _singlePageLayout(pages, params);
-      case ReaderLayout.twoPage:
-        return _twoPageSpreadLayout(pages, params);
-    }
-  }
-
-  static PdfPageLayout _verticalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
-    final width = pages.fold(0.0, (w, p) => math.max(w, p.width)) + params.margin * 2;
-    final pageLayout = <Rect>[];
-    var y = params.margin;
-    for (var i = 0; i < pages.length; i++) {
-      final page = pages[i];
-      final rect = Rect.fromLTWH((width - page.width) / 2, y, page.width, page.height);
-      pageLayout.add(rect);
-      y += page.height + params.margin;
-    }
-    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(width, y));
-  }
-
-  static PdfPageLayout _horizontalPageLayout(List<PdfPage> pages, PdfViewerParams params) {
-    final height = pages.fold(0.0, (h, p) => math.max(h, p.height)) + params.margin * 2;
-    final pageLayout = <Rect>[];
-    var x = params.margin;
-    for (var i = 0; i < pages.length; i++) {
-      final page = pages[i];
-      final rect = Rect.fromLTWH(x, (height - page.height) / 2, page.width, page.height);
-      pageLayout.add(rect);
-      x += page.width + params.margin;
-    }
-    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(x, height));
-  }
-
-  static PdfPageLayout _singlePageLayout(List<PdfPage> pages, PdfViewerParams params) {
-    if (pages.isEmpty) {
-      return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
-    }
-    final maxWidth = pages.fold(0.0, (w, p) => math.max(w, p.width));
-    final maxHeight = pages.fold(0.0, (h, p) => math.max(h, p.height));
-    final slotWidth = maxWidth + params.margin * 2;
-    final slotHeight = maxHeight + params.margin * 2;
-    final pageLayout = <Rect>[];
-    for (var i = 0; i < pages.length; i++) {
-      final page = pages[i];
-      final x = i * slotWidth + (slotWidth - page.width) / 2;
-      final y = (slotHeight - page.height) / 2;
-      pageLayout.add(Rect.fromLTWH(x, y, page.width, page.height));
-    }
-    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(pages.length * slotWidth, slotHeight));
-  }
-
-  static PdfPageLayout _twoPageSpreadLayout(List<PdfPage> pages, PdfViewerParams params) {
-    if (pages.isEmpty) {
-      return PdfPageLayout(pageLayouts: const [], documentSize: Size.zero);
-    }
-    final maxPageWidth = pages.fold(0.0, (w, p) => math.max(w, p.width));
-    final spreadWidth = (maxPageWidth * 2) + (params.margin * 3);
-    final pageLayout = List<Rect>.filled(pages.length, Rect.zero);
-
-    // Page 1 is the cover page: centered horizontally in the spread width
-    var y = params.margin;
-    final cover = pages[0];
-    pageLayout[0] = Rect.fromLTWH(
-      (spreadWidth - cover.width) / 2,
-      y,
-      cover.width,
-      cover.height,
-    );
-    y += cover.height + params.margin;
-
-    // Remaining pages are paired side-by-side (Facing pages: Page 2 & 3, Page 4 & 5, ...)
-    for (var i = 1; i < pages.length; i += 2) {
-      final leftPage = pages[i];
-      if (i + 1 < pages.length) {
-        final rightPage = pages[i + 1];
-        final rowHeight = math.max(leftPage.height, rightPage.height);
-        final leftX = params.margin + (maxPageWidth - leftPage.width);
-        final leftY = y + (rowHeight - leftPage.height) / 2;
-        pageLayout[i] = Rect.fromLTWH(leftX, leftY, leftPage.width, leftPage.height);
-
-        final rightX = params.margin * 2 + maxPageWidth;
-        final rightY = y + (rowHeight - rightPage.height) / 2;
-        pageLayout[i + 1] = Rect.fromLTWH(rightX, rightY, rightPage.width, rightPage.height);
-
-        y += rowHeight + params.margin;
-      } else {
-        // Trailing lone page: centered
-        final leftX = (spreadWidth - leftPage.width) / 2;
-        pageLayout[i] = Rect.fromLTWH(leftX, y, leftPage.width, leftPage.height);
-        y += leftPage.height + params.margin;
-      }
-    }
-
-    return PdfPageLayout(pageLayouts: pageLayout, documentSize: Size(spreadWidth, y));
-  }
+  ) =>
+      ReaderLayoutEngine.calculatePageLayout(pages, params, layout);
 }
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
@@ -187,51 +89,103 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       }
     });
 
+    // Load native PDFium outline first (instantaneous from memory, zero disk or isolate stall)
     try {
-      final pdfService = ref.read(syncfusionPdfServiceProvider);
-      final sfBookmarks = await pdfService.extractBookmarks(widget.params.path);
-      final sfMap = {for (final b in sfBookmarks) b.title.trim().toLowerCase(): b};
-
       final nativeOutline = await document.loadOutline();
       if (nativeOutline.isNotEmpty) {
         final items = <OutlineItem>[];
-        void traverse(List<PdfOutlineNode> nodes, int level) {
-          for (final n in nodes) {
+        int globalIdx = 0;
+        void traverse(List<PdfOutlineNode> nodes, int level, List<int> parentPath) {
+          for (int i = 0; i < nodes.length; i++) {
+            final n = nodes[i];
+            final currentPath = [...parentPath, i];
             final cleanTitle = n.title.trim();
-            final sfMatch = sfMap[cleanTitle.toLowerCase()];
-            final targetPage = n.dest?.pageNumber ?? sfMatch?.targetPage ?? 1;
+            final isValid = n.dest != null &&
+                n.dest!.pageNumber >= 1 &&
+                n.dest!.pageNumber <= document.pages.length;
             items.add(OutlineItem(
-              title: cleanTitle.isNotEmpty ? cleanTitle : 'Section',
-              targetPage: targetPage,
-              destinationTop: sfMatch?.destinationTop,
-              destinationLeft: sfMatch?.destinationLeft,
+              title: cleanTitle.isNotEmpty ? cleanTitle : 'Section ${globalIdx + 1}',
+              targetPage: isValid ? n.dest!.pageNumber : null,
+              isResolved: isValid,
               dest: n.dest,
               level: level,
+              index: globalIdx++,
+              treePath: currentPath,
             ));
             if (n.children.isNotEmpty) {
-              traverse(n.children, level + 1);
+              traverse(n.children, level + 1, currentPath);
             }
           }
         }
-        traverse(nativeOutline, 0);
+
+        traverse(nativeOutline, 0, []);
         if (mounted) {
           setState(() => _outline = items);
         }
-      } else if (sfBookmarks.isNotEmpty) {
-        if (mounted) {
-          setState(() {
-            _outline = sfBookmarks
-                .map((b) => OutlineItem(
-                      title: b.title,
-                      targetPage: b.targetPage,
-                      destinationTop: b.destinationTop,
-                      destinationLeft: b.destinationLeft,
-                      level: b.level,
-                    ))
-                .toList();
-          });
+
+        // If any destination could not be resolved by PDFium, resolve lazily in background
+        if (items.any((item) => !item.isResolved)) {
+          _lazilyAugmentOutlineWithSyncfusion(document.pages.length);
         }
+      } else {
+        // Native outline was empty; lazily check Syncfusion in background isolate
+        _lazilyAugmentOutlineWithSyncfusion(document.pages.length);
       }
+    } catch (_) {}
+  }
+
+  /// Lazily augments outline entries in the background using Syncfusion's named destination resolution.
+  Future<void> _lazilyAugmentOutlineWithSyncfusion(int pageCount) async {
+    try {
+      final pdfService = ref.read(syncfusionPdfServiceProvider);
+      final sfBookmarks = await pdfService.extractBookmarks(widget.params.path);
+      if (sfBookmarks.isEmpty || !mounted) return;
+
+      setState(() {
+        if (_outline.isEmpty) {
+          // Native outline was completely absent, adopt Syncfusion outline directly
+          _outline = sfBookmarks
+              .map((b) => OutlineItem(
+                    title: b.title,
+                    targetPage: b.isResolved ? b.targetPage : null,
+                    isResolved: b.isResolved,
+                    level: b.level,
+                    index: b.index,
+                    treePath: b.treePath,
+                    destinationTop: b.destinationTop,
+                    destinationLeft: b.destinationLeft,
+                  ))
+              .toList();
+        } else {
+          // Merge by pre-order traversal index to preserve order and avoid duplicate title collisions
+          final updated = <OutlineItem>[];
+          for (final item in _outline) {
+            if (item.isResolved && item.targetPage != null) {
+              updated.add(item);
+            } else if (item.index < sfBookmarks.length) {
+              final sfMatch = sfBookmarks[item.index];
+              final isMatchResolved = sfMatch.isResolved &&
+                  sfMatch.targetPage != null &&
+                  sfMatch.targetPage! >= 1 &&
+                  sfMatch.targetPage! <= pageCount;
+              updated.add(OutlineItem(
+                title: item.title,
+                targetPage: isMatchResolved ? sfMatch.targetPage : null,
+                isResolved: isMatchResolved,
+                dest: item.dest,
+                level: item.level,
+                index: item.index,
+                treePath: item.treePath,
+                destinationTop: sfMatch.destinationTop,
+                destinationLeft: sfMatch.destinationLeft,
+              ));
+            } else {
+              updated.add(item);
+            }
+          }
+          _outline = updated;
+        }
+      });
     } catch (_) {}
   }
 
@@ -512,28 +466,73 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
-  Future<void> _navigateToOutlineEntry(OutlineItem entry) async {
-    if (!_pdfController.isReady) return;
+  Future<bool> _navigateToOutlineEntry(OutlineItem entry) async {
+    if (!_pdfController.isReady) return false;
+
+    if (!entry.isResolved || entry.targetPage == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Cannot navigate: "${entry.title}" destination is unresolved or missing.',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return false;
+    }
+
+    final targetPage = entry.targetPage!;
+    final totalPages = _pdfController.document.pages.length;
+    if (targetPage < 1 || targetPage > totalPages) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Cannot navigate: Destination page $targetPage exceeds document length ($totalPages pages).',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return false;
+    }
+
     bool jumped = false;
     if (entry.dest != null) {
       jumped = await _pdfController.goToDest(entry.dest);
     }
-    if (!jumped && entry.targetPage > 0) {
-      if (entry.destinationTop != null &&
-          entry.targetPage <= _pdfController.document.pages.length) {
-        final page = _pdfController.document.pages[entry.targetPage - 1];
-        final top = entry.destinationTop!.clamp(0.0, page.height);
-        final bottom = math.max(0.0, top - 60.0);
+
+    if (!jumped) {
+      final page = _pdfController.document.pages[targetPage - 1];
+      if (entry.destinationTop != null) {
+        // destinationTop and destinationLeft are measured in points from top-left
+        final top = (entry.destinationTop ?? 0.0).clamp(0.0, page.height);
         final left = (entry.destinationLeft ?? 0.0).clamp(0.0, page.width);
+        final bottom = math.min(top + 80.0, page.height);
         final right = math.min(left + 120.0, page.width);
-        await _pdfController.goToRectInsidePage(
-          pageNumber: entry.targetPage,
-          rect: PdfRect(left, top, right, bottom),
+
+        final flutterRect = Rect.fromLTRB(
+          math.min(left, right),
+          math.min(top, bottom),
+          math.max(left, right),
+          math.max(top, bottom),
         );
+        final pdfRect = flutterRect.toPdfRect(page: page);
+
+        await _pdfController.goToRectInsidePage(
+          pageNumber: targetPage,
+          rect: pdfRect,
+        );
+        jumped = true;
       } else {
-        await _pdfController.goToPage(pageNumber: entry.targetPage);
+        await _pdfController.goToPage(pageNumber: targetPage);
+        jumped = true;
       }
     }
+
+    return jumped;
   }
 
   void _fitWidth() {
