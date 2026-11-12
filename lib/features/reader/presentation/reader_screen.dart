@@ -25,6 +25,7 @@ import 'reader_intents.dart';
 import 'reader_search_bar.dart';
 import 'reader_theme_filter.dart';
 import 'thumbnail_strip.dart';
+import 'desktop_pdf_scrollbar.dart';
 
 /// Master PDF Reader Viewport screen powered by PDFium (pdfrx) and Syncfusion PDF Engine.
 class ReaderScreen extends ConsumerStatefulWidget {
@@ -364,16 +365,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           ? const Color(0xFF0F172A)
                           : const Color(0xFFF1F5F9),
                       boundaryMargin: const EdgeInsets.all(double.infinity),
-                      scrollByMouseWheel: 0.2,
+                      scrollByMouseWheel: 1.0,
                       scaleByPointerScale: 1.0,
                       enableKeyboardNavigation: true,
-                      scrollByArrowKey: 40.0,
+                      scrollByArrowKey: 50.0,
                       sizeDelegateProvider:
                           const PdfViewerSizeDelegateProviderLegacy(),
                       interactionDelegateProvider:
                           const PdfViewerScrollInteractionDelegateProviderPhysics(
-                            panFriction: 6.0,
-                            zoomFriction: 6.0,
+                            panFriction: 11.0,
+                            zoomFriction: 11.0,
                           ),
                       layoutPages: (pages, p) =>
                           ReaderScreen.calculatePageLayout(
@@ -382,10 +383,27 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             readerState.layout,
                           ),
                       viewerOverlayBuilder: (context, size, handleLinkTap) => [
-                        PdfViewerScrollThumb(
-                          controller: _pdfController,
-                          orientation: ScrollbarOrientation.right,
-                          thumbSize: const Size(20, 48),
+                        Positioned(
+                          top: 0,
+                          bottom: 0,
+                          right: 2,
+                          child: DesktopPdfScrollbar(
+                            controller: _pdfController,
+                            orientation: Axis.vertical,
+                            pageCount: readerState.pageCount,
+                            currentPage: readerState.currentPage,
+                          ),
+                        ),
+                        Positioned(
+                          left: 0,
+                          right: 16,
+                          bottom: 2,
+                          child: DesktopPdfScrollbar(
+                            controller: _pdfController,
+                            orientation: Axis.horizontal,
+                            pageCount: readerState.pageCount,
+                            currentPage: readerState.currentPage,
+                          ),
                         ),
                       ],
                       pagePaintCallbacks: [

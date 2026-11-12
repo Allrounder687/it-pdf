@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/theme/app_theme.dart';
 import '../../features/reader/domain/reader_state.dart';
 
 /// Docked bottom status bar displaying document status, page progress, and quick layout/zoom controls.
@@ -34,49 +35,62 @@ class DesktopStatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
-    final borderColor = isDark
-        ? const Color(0xFF1E293B)
-        : const Color(0xFFCBD5E1);
+    final bg = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final textPrimary = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final textSecondary = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+    final accentColor = isDark
+        ? AppTheme.primaryBlueDark
+        : AppTheme.primaryBlue;
 
     final progressPct = pageCount > 0
         ? ((currentPage / pageCount) * 100).round()
         : 0;
 
     return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: bg,
         border: Border(top: BorderSide(color: borderColor, width: 1)),
       ),
       child: Row(
         children: [
-          // Status indicator
+          // Status indicator dot
           Container(
-            width: 7,
-            height: 7,
+            width: 6,
+            height: 6,
             decoration: BoxDecoration(
-              color: isLoading ? Colors.amber : Colors.greenAccent.shade700,
+              color: isLoading
+                  ? AppTheme.highlightAmber
+                  : AppTheme.successGreen,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 6),
           Text(
             isLoading ? 'Processing...' : statusMessage,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: textPrimary,
+            ),
           ),
 
           if (documentPath != null) ...[
-            const SizedBox(width: 12),
-            const Text('•', style: TextStyle(fontSize: 10, color: Colors.grey)),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
+            Text('•', style: TextStyle(fontSize: 10, color: textSecondary)),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
                 documentPath!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                style: TextStyle(fontSize: 11, color: textSecondary),
               ),
             ),
           ] else
@@ -86,9 +100,13 @@ class DesktopStatusBar extends StatelessWidget {
           if (documentPath != null && pageCount > 0) ...[
             Text(
               'Page $currentPage of $pageCount ($progressPct%)',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: textPrimary,
+              ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
           ],
 
           // Reading Layout Mode Segmented Icons
@@ -96,55 +114,67 @@ class DesktopStatusBar extends StatelessWidget {
             icon: Icons.view_stream_rounded,
             tooltip: 'Continuous Vertical',
             isActive: currentLayout == ReaderLayout.continuousVertical,
+            activeColor: accentColor,
+            inactiveColor: textSecondary,
             onTap: () => onLayoutChanged(ReaderLayout.continuousVertical),
           ),
           _buildLayoutIcon(
             icon: Icons.filter_1_rounded,
             tooltip: 'Single Page',
             isActive: currentLayout == ReaderLayout.singlePage,
+            activeColor: accentColor,
+            inactiveColor: textSecondary,
             onTap: () => onLayoutChanged(ReaderLayout.singlePage),
           ),
           _buildLayoutIcon(
             icon: Icons.auto_stories_rounded,
             tooltip: 'Two Page Spread',
             isActive: currentLayout == ReaderLayout.twoPage,
+            activeColor: accentColor,
+            inactiveColor: textSecondary,
             onTap: () => onLayoutChanged(ReaderLayout.twoPage),
           ),
           _buildLayoutIcon(
             icon: Icons.view_column_rounded,
             tooltip: 'Continuous Horizontal',
             isActive: currentLayout == ReaderLayout.continuousHorizontal,
+            activeColor: accentColor,
+            inactiveColor: textSecondary,
             onTap: () => onLayoutChanged(ReaderLayout.continuousHorizontal),
           ),
 
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
 
           // Zoom Controls
           InkWell(
+            borderRadius: BorderRadius.circular(3),
             onTap: onZoomOut,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              child: Icon(Icons.remove, size: 14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Icon(Icons.remove, size: 14, color: textSecondary),
             ),
           ),
           InkWell(
+            borderRadius: BorderRadius.circular(3),
             onTap: onFitWidth,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               child: Text(
                 '${(currentZoom * 100).round()}%',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
+                  color: textPrimary,
                 ),
               ),
             ),
           ),
           InkWell(
+            borderRadius: BorderRadius.circular(3),
             onTap: onZoomIn,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              child: Icon(Icons.add, size: 14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Icon(Icons.add, size: 14, color: textSecondary),
             ),
           ),
         ],
@@ -156,18 +186,21 @@ class DesktopStatusBar extends StatelessWidget {
     required IconData icon,
     required String tooltip,
     required bool isActive,
+    required Color activeColor,
+    required Color inactiveColor,
     required VoidCallback onTap,
   }) {
     return Tooltip(
       message: tooltip,
       child: InkWell(
+        borderRadius: BorderRadius.circular(3),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: Icon(
             icon,
             size: 15,
-            color: isActive ? Colors.blueAccent : Colors.grey,
+            color: isActive ? activeColor : inactiveColor,
           ),
         ),
       ),

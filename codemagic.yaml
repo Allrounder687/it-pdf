@@ -1,0 +1,176 @@
+workflows:
+  ios-unsigned-ipa:
+    name: Build Pure iOS IPA (Unsigned)
+    max_build_duration: 35
+    instance_type: mac_mini_m2
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+        - pattern: 'ios-v*'
+          include: true
+      cancel_previous_builds: true
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    cache:
+      cache_paths:
+        - $FLUTTER_ROOT/.pub-cache
+        - $HOME/Library/Caches/CocoaPods
+        - ios/Pods
+    scripts:
+      - name: Initialize Environment & Flutter SPM
+        script: |
+          flutter config --enable-swift-package-manager --no-analytics
+
+          echo "Patching Flutter SDK SPM minimum deployment target to 15.0..."
+          find "$FLUTTER_ROOT/packages/flutter_tools" -type f -name "*.dart" -exec sed -i '' 's/"13\.0"/"15\.0"/g' {} + || true
+          find "$FLUTTER_ROOT/packages/flutter_tools" -type f -name "*.tmpl" -exec sed -i '' 's/"13\.0"/"15\.0"/g' {} + || true
+          find "$FLUTTER_ROOT/packages/flutter_tools" -type f -name "*.dart" -exec sed -i '' "s/'13\.0'/'15\.0'/g" {} + || true
+          find "$FLUTTER_ROOT/packages/flutter_tools" -type f -name "*.tmpl" -exec sed -i '' "s/'13\.0'/'15\.0'/g" {} + || true
+          rm -f "$FLUTTER_ROOT/bin/cache/flutter_tools.stamp"
+          rm -f "$FLUTTER_ROOT/bin/cache/flutter_tools.snapshot"
+          flutter --version
+
+          flutter pub get
+
+      - name: Configure Xcode Signing Overrides & Pods
+        script: |
+          for conf in Release Debug Profile Generated; do
+            if [ -f "ios/Flutter/$conf.xcconfig" ]; then
+              echo "DEVELOPMENT_TEAM=A1B2C3D4E5" >> "ios/Flutter/$conf.xcconfig"
+              echo "CODE_SIGNING_ALLOWED=NO" >> "ios/Flutter/$conf.xcconfig"
+              echo "CODE_SIGNING_REQUIRED=NO" >> "ios/Flutter/$conf.xcconfig"
+              echo "CODE_SIGN_IDENTITY=" >> "ios/Flutter/$conf.xcconfig"
+              echo "EXPANDED_CODE_SIGN_IDENTITY=" >> "ios/Flutter/$conf.xcconfig"
+              echo "IPHONEOS_DEPLOYMENT_TARGET=15.0" >> "ios/Flutter/$conf.xcconfig"
+            fi
+          done
+
+          flutter build ios --config-only
+
+          if [ -f "ios/Podfile" ]; then
+            cd ios
+            pod install || pod install --repo-update
+            cd ..
+          fi
+
+          echo "Patching generated Package.swift files to iOS 15.0..."
+          find ios .symlinks -name "Package.swift" -type f -exec sed -i '' 's/"12\.0"/"15\.0"/g' {} + || true
+          find ios .symlinks -name "Package.swift" -type f -exec sed -i '' 's/"13\.0"/"15\.0"/g' {} + || true
+          find ios .symlinks -name "Package.swift" -type f -exec sed -i '' 's/"14\.0"/"15\.0"/g' {} + || true
+
+      - name: Build iOS Unsigned Release
+        script: |
+          APP_VER=$(grep "version:" pubspec.yaml | head -n 1 | awk '{print $2}')
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          flutter build ios --release --no-codesign \
+            --dart-define=APP_VERSION="$APP_VER" \
+            --dart-define=GIT_COMMIT_HASH="$COMMIT_HASH"
+
+      - name: Package & Pseudo-Sign IPA (TrollStore / Sideloading)
+        script: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+
+          if ! command -v ldid &> /dev/null; then
+            brew install ldid || true
+          fi
+
+          if command -v ldid &> /dev/null; then
+            echo "Pseudo-signing executable and frameworks..."
+            ldid -S Payload/Runner.app/Runner || true
+            if [ -d "Payload/Runner.app/Frameworks" ]; then
+              find Payload/Runner.app/Frameworks -name "*.framework" -type d | while read framework; do
+                framework_name=$(basename "$framework" .framework)
+                if [ -f "$framework/$framework_name" ]; then
+                  ldid -S "$framework/$framework_name" || true
+                fi
+              done
+            fi
+            find Payload/Runner.app -name "*.dylib" -type f | while read dylib; do
+              ldid -S "$dylib" || true
+            done
+          fi
+
+          zip -qr9 ../../../IT-PDF.ipa Payload
+          cd ../../..
+
+      - name: Publish to GitHub Releases (if GITHUB_TOKEN configured)
+        script: |
+          if [ -n "${GITHUB_TOKEN:-}" ]; then
+            APP_VER=$(grep "version:" pubspec.yaml | head -n 1 | awk '{print $2}')
+            TAG_NAME="${CM_TAG:-v${APP_VER}}"
+            gh release upload "$TAG_NAME" "IT-PDF.ipa" --clobber || \
+              gh release create "$TAG_NAME" "IT-PDF.ipa" \
+                --title "IT PDF v${APP_VER}" \
+                --notes "Automated iOS Unsigned IPA build from Codemagic." || true
+          else
+            echo "GITHUB_TOKEN not set in Codemagic environment; skipping GitHub release upload."
+          fi
+
+    artifacts:
+      - IT-PDF.ipa
+      - build/ios/iphoneos/Runner.app
+      - "*.ipa"
+
+  android-release-apk:
+    name: Build Android Release APK
+    max_build_duration: 25
+    instance_type: linux_x2
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+      cancel_previous_builds: true
+    environment:
+      flutter: stable
+      java: 17
+    cache:
+      cache_paths:
+        - $FLUTTER_ROOT/.pub-cache
+        - $HOME/.gradle/caches
+    scripts:
+      - name: Install Dependencies
+        script: flutter pub get
+      - name: Build Versioned Android Release APK
+        script: |
+          APP_VER=$(grep "version:" pubspec.yaml | head -n 1 | awk '{print $2}')
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          flutter build apk --release \
+            --dart-define=APP_VERSION="$APP_VER" \
+            --dart-define=GIT_COMMIT_HASH="$COMMIT_HASH"
+          mkdir -p releases
+          cp build/app/outputs/flutter-apk/app-release.apk "releases/IT-PDF-v${APP_VER}-${COMMIT_HASH}.apk"
+    artifacts:
+      - releases/*.apk
+      - build/app/outputs/flutter-apk/*.apk
+
+  windows-release-installer:
+    name: Build Windows Release Installer
+    max_build_duration: 30
+    instance_type: windows_x2
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+      cancel_previous_builds: true
+    environment:
+      flutter: stable
+    scripts:
+      - name: Install Dependencies
+        script: flutter pub get
+      - name: Build Windows Release & Inno Setup Installer
+        script: |
+          winget install --id JRSoftware.InnoSetup --accept-source-agreements --accept-package-agreements --silent || true
+          powershell -ExecutionPolicy Bypass -File compile_inno.ps1
+    artifacts:
+      - releases/*.exe

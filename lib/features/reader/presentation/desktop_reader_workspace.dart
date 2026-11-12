@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
 import '../../../core/providers.dart';
+import '../../annotations/domain/annotation_model.dart';
 import '../../annotations/domain/annotation_notifier.dart';
 import '../../annotations/presentation/annotation_overlay.dart';
 import '../../page_organizer/domain/page_organizer_notifier.dart';
@@ -23,12 +25,22 @@ import 'outline_drawer.dart';
 import 'reader_intents.dart';
 import 'reader_search_bar.dart';
 import 'reader_theme_filter.dart';
+import 'desktop_pdf_scrollbar.dart';
+import '../../editor/domain/editor_notifier.dart';
+import '../../editor/domain/editor_state.dart';
+import '../../editor/presentation/editor_canvas_overlay.dart';
+import '../../editor/presentation/editor_properties_panel.dart';
 
 /// Complete desktop reading workspace for an active PDF document tab.
 class DesktopReaderWorkspace extends ConsumerStatefulWidget {
   final DocumentTab tab;
+  final VoidCallback? onBackToHome;
 
-  const DesktopReaderWorkspace({super.key, required this.tab});
+  const DesktopReaderWorkspace({
+    super.key,
+    required this.tab,
+    this.onBackToHome,
+  });
 
   @override
   ConsumerState<DesktopReaderWorkspace> createState() =>
@@ -44,6 +56,11 @@ class _DesktopReaderWorkspaceState
   bool _isLeftPanelOpen = true;
   bool _isRightPanelOpen = false;
   double _currentZoom = 1.0;
+
+  EditorNotifierParams get _editorParams => EditorNotifierParams(
+    documentId: widget.tab.id,
+    documentPath: widget.tab.path,
+  );
 
   @override
   void initState() {
@@ -287,6 +304,26 @@ class _DesktopReaderWorkspaceState
   }
 
   Future<void> _handleSave() async {
+    final editorState = ref.read(editorNotifierProvider(_editorParams));
+    if (editorState.workspaceMode == WorkspaceMode.edit &&
+        editorState.hasUnsavedChanges) {
+      final savedPath = await ref
+          .read(editorNotifierProvider(_editorParams).notifier)
+          .save(overwriteOriginal: true);
+      if (mounted) {
+        ref
+            .read(documentTabsNotifierProvider.notifier)
+            .setTabDirtyById(widget.tab.id, false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Document content modified & saved: $savedPath'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
     final annNotifier = ref.read(
       annotationNotifierProvider(widget.tab.id).notifier,
     );
@@ -312,12 +349,59 @@ class _DesktopReaderWorkspaceState
   }
 
   Future<void> _handleSaveAs() async {
+    final srcFile = File(widget.tab.path);
+    if (!await srcFile.exists()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Source document not found.')),
+        );
+      }
+      return;
+    }
+
+    final sourceBytes = await srcFile.readAsBytes();
+
     final picker = ref.read(filePickerServiceProvider);
+    String defaultFileName = widget.tab.name;
+    if (!defaultFileName.toLowerCase().endsWith('.pdf')) {
+      defaultFileName = '$defaultFileName.pdf';
+    }
+    if (!defaultFileName.toLowerCase().startsWith('copy_')) {
+      defaultFileName = 'Copy_$defaultFileName';
+    }
+
     final targetPath = await picker.pickSaveFilePath(
       dialogTitle: 'Save PDF As',
-      defaultFileName: 'Copy_${widget.tab.name}',
+      defaultFileName: defaultFileName,
+      initialBytes: sourceBytes,
     );
     if (targetPath != null) {
+      final editorState = ref.read(editorNotifierProvider(_editorParams));
+      if (editorState.workspaceMode == WorkspaceMode.edit &&
+          editorState.hasUnsavedChanges) {
+        final savedPath = await ref
+            .read(editorNotifierProvider(_editorParams).notifier)
+            .save(outputPath: targetPath);
+
+        final annState = ref.read(annotationNotifierProvider(widget.tab.id));
+        if (annState.draftAnnotations.isNotEmpty) {
+          final annNotifier = ref.read(
+            annotationNotifierProvider(widget.tab.id).notifier,
+          );
+          await annNotifier.burnAnnotationsToFile(savedPath, savedPath);
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Saved copy to $savedPath'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
       final annNotifier = ref.read(
         annotationNotifierProvider(widget.tab.id).notifier,
       );
@@ -408,6 +492,7 @@ class _DesktopReaderWorkspaceState
     final annNotifier = ref.read(
       annotationNotifierProvider(widget.tab.id).notifier,
     );
+    final editorState = ref.watch(editorNotifierProvider(_editorParams));
 
     return Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
@@ -445,9 +530,46 @@ class _DesktopReaderWorkspaceState
           control: true,
           shift: true,
         ): const PrevTabIntent(),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
+            const NavigateHomeIntent(),
+        const SingleActivator(LogicalKeyboardKey.escape):
+            const EscapeActionIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
+          NavigateHomeIntent: CallbackAction<NavigateHomeIntent>(
+            onInvoke: (_) {
+              widget.onBackToHome?.call();
+              return null;
+            },
+          ),
+          EscapeActionIntent: CallbackAction<EscapeActionIntent>(
+            onInvoke: (_) {
+              if (readerState.showSearch && _searcher != null) {
+                notifier.toggleSearch();
+                return null;
+              }
+              final annNotifier = ref.read(
+                annotationNotifierProvider(widget.tab.id).notifier,
+              );
+              final annState = ref.read(
+                annotationNotifierProvider(widget.tab.id),
+              );
+              if (annState.activeTool != AnnotationTool.none) {
+                annNotifier.setActiveTool(AnnotationTool.none);
+                return null;
+              }
+              if (_isRightPanelOpen) {
+                setState(() => _isRightPanelOpen = false);
+                return null;
+              }
+              if (_isLeftPanelOpen) {
+                setState(() => _isLeftPanelOpen = false);
+                return null;
+              }
+              return null;
+            },
+          ),
           SaveDocumentIntent: CallbackAction<SaveDocumentIntent>(
             onInvoke: (_) => _handleSave(),
           ),
@@ -505,6 +627,7 @@ class _DesktopReaderWorkspaceState
             children: [
               // Dedicated Desktop Toolbar
               DesktopReaderToolbar(
+                onBackToHome: widget.onBackToHome,
                 documentId: widget.tab.id,
                 documentPath: widget.tab.path,
                 currentPage: readerState.currentPage,
@@ -576,6 +699,20 @@ class _DesktopReaderWorkspaceState
                               widget.tab.path,
                               controller: _pdfController,
                               params: PdfViewerParams(
+                                backgroundColor:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? const Color(0xFF16181B)
+                                    : const Color(0xFFEBECEE),
+                                scrollByMouseWheel: 1.0,
+                                scaleByPointerScale: 1.0,
+                                enableKeyboardNavigation: true,
+                                scrollByArrowKey: 50.0,
+                                interactionDelegateProvider:
+                                    const PdfViewerScrollInteractionDelegateProviderPhysics(
+                                      panFriction: 11.0,
+                                      zoomFriction: 11.0,
+                                    ),
                                 layoutPages: (pages, prms) =>
                                     ReaderLayoutEngine.calculatePageLayout(
                                       pages,
@@ -609,6 +746,33 @@ class _DesktopReaderWorkspaceState
                                         );
                                   }
                                 },
+                                viewerOverlayBuilder:
+                                    (context, size, handleLinkTap) => [
+                                      // Precision Vertical Desktop Scrollbar docked on the right
+                                      Positioned(
+                                        top: 0,
+                                        bottom: 0,
+                                        right: 2,
+                                        child: DesktopPdfScrollbar(
+                                          controller: _pdfController,
+                                          orientation: Axis.vertical,
+                                          pageCount: readerState.pageCount,
+                                          currentPage: readerState.currentPage,
+                                        ),
+                                      ),
+                                      // Precision Horizontal Desktop Scrollbar docked at bottom
+                                      Positioned(
+                                        left: 0,
+                                        right: 16,
+                                        bottom: 2,
+                                        child: DesktopPdfScrollbar(
+                                          controller: _pdfController,
+                                          orientation: Axis.horizontal,
+                                          pageCount: readerState.pageCount,
+                                          currentPage: readerState.currentPage,
+                                        ),
+                                      ),
+                                    ],
                                 pageOverlaysBuilder: (context, pageRect, page) {
                                   return [
                                     AnnotationOverlay(
@@ -619,6 +783,18 @@ class _DesktopReaderWorkspaceState
                                         pageRect.height,
                                       ),
                                     ),
+                                    if (editorState.workspaceMode ==
+                                        WorkspaceMode.edit)
+                                      EditorCanvasOverlay(
+                                        documentId: widget.tab.id,
+                                        documentPath: widget.tab.path,
+                                        pageIndex: page.pageNumber - 1,
+                                        pageSize: Size(page.width, page.height),
+                                        renderSize: Size(
+                                          pageRect.width,
+                                          pageRect.height,
+                                        ),
+                                      ),
                                   ];
                                 },
                               ),
@@ -657,6 +833,19 @@ class _DesktopReaderWorkspaceState
                         onJumpToPage: _goToPage,
                         onClose: () =>
                             setState(() => _isRightPanelOpen = false),
+                      ),
+
+                    // Docked Right Editor Properties Panel (when in Edit Mode)
+                    if (editorState.workspaceMode == WorkspaceMode.edit &&
+                        editorState.isPropertiesPanelOpen)
+                      EditorPropertiesPanel(
+                        documentId: widget.tab.id,
+                        documentPath: widget.tab.path,
+                        onClose: () => ref
+                            .read(
+                              editorNotifierProvider(_editorParams).notifier,
+                            )
+                            .togglePropertiesPanel(),
                       ),
                   ],
                 ),

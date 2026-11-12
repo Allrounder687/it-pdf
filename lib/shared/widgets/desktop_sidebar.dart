@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/theme/app_theme.dart';
 
 enum DesktopNavDestination {
   home,
@@ -8,9 +9,13 @@ enum DesktopNavDestination {
   tools,
   settings,
   activeDocument,
+  thumbnails,
+  bookmarks,
+  attachments,
 }
 
 /// Collapsible navigation sidebar for the desktop application shell.
+/// Inspired by Microsoft Fluent Design 2 with subtle indicators and restrained tones.
 class DesktopSidebar extends StatelessWidget {
   final DesktopNavDestination currentDestination;
   final ValueChanged<DesktopNavDestination> onDestinationSelected;
@@ -40,47 +45,52 @@ class DesktopSidebar extends StatelessWidget {
   }) {
     final isSelected = currentDestination == destination;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final textSecondary = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+    final activeAccent =
+        accentColor ??
+        (isDark ? AppTheme.primaryBlueDark : AppTheme.primaryBlue);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: Tooltip(
         message: isExpanded ? '' : label,
         waitDuration: const Duration(milliseconds: 400),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(4),
           onTap: () => onDestinationSelected(destination),
           child: Container(
-            height: 38,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               color: isSelected
-                  ? (accentColor != null
-                        ? accentColor.withValues(alpha: 0.15)
-                        : (isDark
-                              ? Colors.blueAccent.withValues(alpha: 0.2)
-                              : Colors.blueAccent.withValues(alpha: 0.12)))
+                  ? activeAccent.withValues(alpha: isDark ? 0.14 : 0.08)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              border: isSelected
-                  ? Border.all(
-                      color:
-                          accentColor ??
-                          Colors.blueAccent.withValues(alpha: 0.4),
-                      width: 1,
-                    )
-                  : null,
+              borderRadius: BorderRadius.circular(4),
             ),
             child: Row(
               children: [
+                if (isSelected)
+                  Container(
+                    width: 3,
+                    height: 18,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: activeAccent,
+                      borderRadius: BorderRadius.circular(1.5),
+                    ),
+                  ),
                 Icon(
                   isSelected ? selectedIcon : icon,
-                  size: 19,
-                  color: isSelected
-                      ? (accentColor ?? Colors.blueAccent)
-                      : (isDark ? Colors.white70 : Colors.black87),
+                  size: 18,
+                  color: isSelected ? activeAccent : textSecondary,
                 ),
                 if (isExpanded) ...[
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -93,11 +103,9 @@ class DesktopSidebar extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.w500,
-                            color: isSelected
-                                ? (accentColor ?? Colors.blueAccent)
-                                : null,
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: isSelected ? textPrimary : textSecondary,
                           ),
                         ),
                         if (subtitle != null)
@@ -107,9 +115,7 @@ class DesktopSidebar extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 10,
-                              color: Theme.of(
-                                context,
-                              ).textTheme.bodySmall?.color,
+                              color: textSecondary,
                             ),
                           ),
                       ],
@@ -127,22 +133,25 @@ class DesktopSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-    final borderColor = isDark
-        ? const Color(0xFF1E293B)
-        : const Color(0xFFE2E8F0);
+    final bg = isDark
+        ? AppTheme.darkSurfaceVariant
+        : AppTheme.lightSurfaceVariant;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final textSecondary = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 150),
       curve: Curves.easeInOut,
-      width: isExpanded ? 200 : 56,
+      width: isExpanded ? 190 : 52,
       decoration: BoxDecoration(
         color: bg,
         border: Border(right: BorderSide(color: borderColor, width: 1)),
       ),
       child: Column(
         children: [
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
           // Active Document Quick Jump Button (if open)
           if (hasActiveDocument) ...[
@@ -153,11 +162,10 @@ class DesktopSidebar extends StatelessWidget {
               selectedIcon: Icons.chrome_reader_mode,
               label: 'Active Reader',
               subtitle: activeDocumentTitle,
-              accentColor: Colors.blueAccent,
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              child: Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Divider(height: 1, color: borderColor),
             ),
           ],
 
@@ -197,11 +205,39 @@ class DesktopSidebar extends StatelessWidget {
             label: 'PDF Tools',
           ),
 
+          if (hasActiveDocument) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Divider(height: 1, color: borderColor),
+            ),
+            _buildItem(
+              context: context,
+              destination: DesktopNavDestination.thumbnails,
+              icon: Icons.grid_view_outlined,
+              selectedIcon: Icons.grid_view_rounded,
+              label: 'Thumbnails',
+            ),
+            _buildItem(
+              context: context,
+              destination: DesktopNavDestination.bookmarks,
+              icon: Icons.bookmark_border_rounded,
+              selectedIcon: Icons.bookmark_rounded,
+              label: 'Bookmarks',
+            ),
+            _buildItem(
+              context: context,
+              destination: DesktopNavDestination.attachments,
+              icon: Icons.attach_file_outlined,
+              selectedIcon: Icons.attach_file_rounded,
+              label: 'Attachments',
+            ),
+          ],
+
           const Spacer(),
 
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            child: Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Divider(height: 1, color: borderColor),
           ),
 
           _buildItem(
@@ -214,29 +250,29 @@ class DesktopSidebar extends StatelessWidget {
 
           // Collapse / Expand toggle button
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: Tooltip(
               message: isExpanded ? 'Collapse Sidebar' : 'Expand Sidebar',
               child: InkWell(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(4),
                 onTap: onToggleExpanded,
                 child: Container(
-                  height: 34,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Row(
                     children: [
                       Icon(
                         isExpanded
                             ? Icons.menu_open_rounded
                             : Icons.menu_rounded,
-                        size: 19,
-                        color: Colors.grey,
+                        size: 18,
+                        color: textSecondary,
                       ),
                       if (isExpanded) ...[
-                        const SizedBox(width: 12),
-                        const Text(
+                        const SizedBox(width: 10),
+                        Text(
                           'Collapse',
-                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                          style: TextStyle(fontSize: 11, color: textSecondary),
                         ),
                       ],
                     ],

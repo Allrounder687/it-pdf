@@ -153,8 +153,8 @@ class SafeDocumentStorage {
         );
       }
 
-      // 3. Handle backup if destination file already exists
-      if (await targetFile.exists()) {
+      // 3. Handle backup if destination file already exists and is non-empty
+      if (await targetFile.exists() && await targetFile.length() > 0) {
         if (createBackup) {
           final timestamp = DateTime.now().millisecondsSinceEpoch;
           backupPath = p.join(

@@ -64,3 +64,11 @@ class FirstPageIntent extends Intent {
 class LastPageIntent extends Intent {
   const LastPageIntent();
 }
+
+class NavigateHomeIntent extends Intent {
+  const NavigateHomeIntent();
+}
+
+class EscapeActionIntent extends Intent {
+  const EscapeActionIntent();
+}

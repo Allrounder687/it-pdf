@@ -98,6 +98,7 @@ class _DesktopNavigationPanelState
     final targetPath = await picker.pickSaveFilePath(
       dialogTitle: 'Export Attachment',
       defaultFileName: attachment.fileName,
+      initialBytes: attachment.data,
     );
     if (targetPath != null) {
       final service = ref.read(pdfMetadataServiceProvider);

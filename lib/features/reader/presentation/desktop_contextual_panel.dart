@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../ai_assistant/domain/ai_document_service.dart';
 import '../../annotations/domain/annotation_notifier.dart';
 
@@ -124,10 +125,10 @@ class _DesktopContextualPanelState
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF161F2E) : const Color(0xFFF8FAFC);
-    final borderColor = isDark
-        ? const Color(0xFF263346)
-        : const Color(0xFFE2E8F0);
+    final bg = isDark
+        ? AppTheme.darkSurfaceVariant
+        : AppTheme.lightSurfaceVariant;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
 
     return Container(
       width: 320,

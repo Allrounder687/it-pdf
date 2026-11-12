@@ -1,0 +1,132 @@
+name: iOS Unsigned Build (Zero-Queue Highway)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    name: Build Unsigned iOS IPA (TrollStore / Sideloading)
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Setup CocoaPods & Pub Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            $HOME/Library/Caches/CocoaPods
+            $FLUTTER_ROOT/.pub-cache
+          key: ${{ runner.os }}-ios-cache-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-ios-cache-
+
+      - name: Configure Flutter & SPM Deployment Target
+        run: |
+          flutter config --enable-swift-package-manager --no-analytics
+
+          echo "Patching Flutter SDK SPM minimum deployment target to 15.0..."
+          find "$FLUTTER_ROOT/packages/flutter_tools" -type f -name "*.dart" -exec sed -i '' 's/"13\.0"/"15\.0"/g' {} + || true
+          find "$FLUTTER_ROOT/packages/flutter_tools" -type f -name "*.tmpl" -exec sed -i '' 's/"13\.0"/"15\.0"/g' {} + || true
+          find "$FLUTTER_ROOT/packages/flutter_tools" -type f -name "*.dart" -exec sed -i '' "s/'13\.0'/'15\.0'/g" {} + || true
+          find "$FLUTTER_ROOT/packages/flutter_tools" -type f -name "*.tmpl" -exec sed -i '' "s/'13\.0'/'15\.0'/g" {} + || true
+          rm -f "$FLUTTER_ROOT/bin/cache/flutter_tools.stamp"
+          rm -f "$FLUTTER_ROOT/bin/cache/flutter_tools.snapshot"
+          flutter --version
+
+          flutter pub get
+
+      - name: Configure Xcode Signing Overrides & Pods
+        run: |
+          for conf in Release Debug Profile Generated; do
+            if [ -f "ios/Flutter/$conf.xcconfig" ]; then
+              echo "DEVELOPMENT_TEAM=A1B2C3D4E5" >> "ios/Flutter/$conf.xcconfig"
+              echo "CODE_SIGNING_ALLOWED=NO" >> "ios/Flutter/$conf.xcconfig"
+              echo "CODE_SIGNING_REQUIRED=NO" >> "ios/Flutter/$conf.xcconfig"
+              echo "CODE_SIGN_IDENTITY=" >> "ios/Flutter/$conf.xcconfig"
+              echo "EXPANDED_CODE_SIGN_IDENTITY=" >> "ios/Flutter/$conf.xcconfig"
+              echo "IPHONEOS_DEPLOYMENT_TARGET=15.0" >> "ios/Flutter/$conf.xcconfig"
+            fi
+          done
+
+          flutter build ios --config-only
+
+          if [ -f "ios/Podfile" ]; then
+            cd ios
+            pod install || pod install --repo-update
+            cd ..
+          fi
+
+          find ios .symlinks packages -name "Package.swift" -type f -exec sed -i '' 's/"9\.0"/"15\.0"/g' {} + 2>/dev/null || true
+          find ios .symlinks packages -name "Package.swift" -type f -exec sed -i '' 's/"12\.0"/"15\.0"/g' {} + 2>/dev/null || true
+          find ios .symlinks packages -name "Package.swift" -type f -exec sed -i '' 's/"13\.0"/"15\.0"/g' {} + 2>/dev/null || true
+          find ios .symlinks packages -name "Package.swift" -type f -exec sed -i '' 's/"14\.0"/"15\.0"/g' {} + 2>/dev/null || true
+
+      - name: Build iOS Application (Release, No Code Sign)
+        run: |
+          APP_VER=$(grep "version:" pubspec.yaml | head -n 1 | awk '{print $2}')
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          flutter build ios --release --no-codesign \
+            --dart-define=APP_VERSION="$APP_VER" \
+            --dart-define=GIT_COMMIT_HASH="$COMMIT_HASH"
+
+      - name: Install ldid & Pseudo-Sign IPA
+        run: |
+          brew install ldid || true
+
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+
+          if command -v ldid &> /dev/null; then
+            echo "Applying ldid pseudo-signature..."
+            ldid -S Payload/Runner.app/Runner || true
+            if [ -d "Payload/Runner.app/Frameworks" ]; then
+              find Payload/Runner.app/Frameworks -name "*.framework" -type d | while read framework; do
+                framework_name=$(basename "$framework" .framework)
+                if [ -f "$framework/$framework_name" ]; then
+                  ldid -S "$framework/$framework_name" || true
+                fi
+              done
+            fi
+            find Payload/Runner.app -name "*.dylib" -type f | while read dylib; do
+              ldid -S "$dylib" || true
+            done
+          fi
+
+          zip -qr9 ../../../IT-PDF.ipa Payload
+          cd ../../..
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IT-PDF.ipa
+          path: IT-PDF.ipa
+          retention-days: 14
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          files: IT-PDF.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../features/editor/presentation/tools_screen.dart';
@@ -11,6 +12,7 @@ import '../../features/reader/domain/document_tab.dart';
 import '../../features/reader/domain/document_tabs_notifier.dart';
 import '../../features/reader/domain/reader_notifier.dart';
 import '../../features/reader/presentation/desktop_reader_workspace.dart';
+import '../../features/reader/presentation/reader_intents.dart';
 import '../../features/reader/presentation/reader_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../shared/widgets/command_palette_dialog.dart';
@@ -34,11 +36,11 @@ class _AppShellState extends ConsumerState<AppShell> {
   bool _isSidebarExpanded = true;
   bool _isDragging = false;
 
-  static const List<Widget> _mobileDestinations = [
-    HomeScreen(),
-    LibraryScreen(),
-    ToolsScreen(),
-    SettingsScreen(),
+  List<Widget> _getMobileDestinations() => [
+    HomeScreen(onNavigateToTools: () => setState(() => _mobileIndex = 2)),
+    const LibraryScreen(),
+    const ToolsScreen(),
+    const SettingsScreen(),
   ];
 
   @override
@@ -46,6 +48,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkCliLaunchArgs();
+    });
+  }
+
+  void _navigateHome() {
+    setState(() {
+      _desktopDestination = DesktopNavDestination.home;
     });
   }
 
@@ -196,7 +204,8 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to active tab changes: if a new tab is opened, automatically navigate to reader
+    // Listen to active tab changes: if a new tab is opened, automatically navigate to reader.
+    // If all tabs are closed, return safely to home screen.
     ref.listen<int>(documentTabsNotifierProvider.select((s) => s.activeIndex), (
       prev,
       next,
@@ -206,6 +215,9 @@ class _AppShellState extends ConsumerState<AppShell> {
         setState(
           () => _desktopDestination = DesktopNavDestination.activeDocument,
         );
+      } else if (next < 0 &&
+          _desktopDestination == DesktopNavDestination.activeDocument) {
+        setState(() => _desktopDestination = DesktopNavDestination.home);
       }
     });
 
@@ -270,82 +282,150 @@ class _AppShellState extends ConsumerState<AppShell> {
         _desktopDestination == DesktopNavDestination.activeDocument &&
         tabsState.hasActiveTab;
 
-    return Scaffold(
-      body: Column(
-        children: [
-          // Top Title Bar
-          DesktopTitleBar(
-            activeDocumentName: activeTab?.name,
-            isDirty: activeTab?.isDirty ?? false,
-            onOpenPdf: _openPdfWithPicker,
-            onOpenCommandPalette: _openCommandPalette,
-            onToggleTheme: () {
-              final current = ref.read(themeModeProvider);
-              ref
-                  .read(themeModeProvider.notifier)
-                  .setThemeMode(
-                    current == ThemeMode.dark
-                        ? ThemeMode.light
-                        : ThemeMode.dark,
-                  );
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
+            const NavigateHomeIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          NavigateHomeIntent: CallbackAction<NavigateHomeIntent>(
+            onInvoke: (_) {
+              if (showReader) _navigateHome();
+              return null;
             },
-            onShowShortcuts: _showShortcutsDialog,
           ),
+        },
+        child: Scaffold(
+          body: Column(
+            children: [
+              // Top Title Bar with prominent Back to Home navigation
+              DesktopTitleBar(
+                activeDocumentName: activeTab?.name,
+                isDirty: activeTab?.isDirty ?? false,
+                onBackToHome: showReader ? _navigateHome : null,
+                onOpenPdf: _openPdfWithPicker,
+                onOpenCommandPalette: _openCommandPalette,
+                onToggleTheme: () {
+                  final current = ref.read(themeModeProvider);
+                  ref
+                      .read(themeModeProvider.notifier)
+                      .setThemeMode(
+                        current == ThemeMode.dark
+                            ? ThemeMode.light
+                            : ThemeMode.dark,
+                      );
+                },
+                onShowShortcuts: _showShortcutsDialog,
+              ),
 
-          // Multi-Document Tab Strip
-          DesktopTabBar(onNewTab: _openPdfWithPicker),
+              // Multi-Document Tab Strip with Home tab
+              DesktopTabBar(
+                onNewTab: _openPdfWithPicker,
+                onBackToHome: showReader ? _navigateHome : null,
+                onTabSelected: (_) {
+                  if (_desktopDestination !=
+                      DesktopNavDestination.activeDocument) {
+                    setState(
+                      () => _desktopDestination =
+                          DesktopNavDestination.activeDocument,
+                    );
+                  }
+                },
+              ),
 
-          // Central Body: Left Sidebar + Content Area
-          Expanded(
-            child: Row(
-              children: [
-                DesktopSidebar(
-                  currentDestination: _desktopDestination,
-                  isExpanded: _isSidebarExpanded,
-                  hasActiveDocument: tabsState.hasActiveTab,
-                  activeDocumentTitle: activeTab?.name,
-                  onToggleExpanded: () {
-                    setState(() => _isSidebarExpanded = !_isSidebarExpanded);
-                  },
-                  onDestinationSelected: (dest) {
-                    setState(() => _desktopDestination = dest);
-                  },
-                ),
+              // Central Body: Left Sidebar + Content Area
+              Expanded(
+                child: Row(
+                  children: [
+                    DesktopSidebar(
+                      currentDestination: _desktopDestination,
+                      isExpanded: _isSidebarExpanded,
+                      hasActiveDocument: tabsState.hasActiveTab,
+                      activeDocumentTitle: activeTab?.name,
+                      onToggleExpanded: () {
+                        setState(
+                          () => _isSidebarExpanded = !_isSidebarExpanded,
+                        );
+                      },
+                      onDestinationSelected: (dest) {
+                        if (dest == DesktopNavDestination.thumbnails ||
+                            dest == DesktopNavDestination.bookmarks ||
+                            dest == DesktopNavDestination.attachments) {
+                          setState(() {
+                            _desktopDestination =
+                                DesktopNavDestination.activeDocument;
+                          });
+                        } else {
+                          setState(() => _desktopDestination = dest);
+                        }
+                      },
+                    ),
 
-                // Main Content Workspace
-                Expanded(
-                  child: showReader
-                      ? IndexedStack(
-                          index: tabsState.activeIndex,
-                          children: tabsState.openTabs
-                              .map(
-                                (tab) => DesktopReaderWorkspace(
-                                  key: ValueKey('workspace_${tab.id}'),
-                                  tab: tab,
+                    // Main Content Workspace: Preserves Document State in memory across Home visits
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          if (tabsState.openTabs.isNotEmpty)
+                            Offstage(
+                              offstage: !showReader,
+                              child: IndexedStack(
+                                index: tabsState.activeIndex.clamp(
+                                  0,
+                                  tabsState.openTabs.length - 1,
                                 ),
-                              )
-                              .toList(),
-                        )
-                      : switch (_desktopDestination) {
-                          DesktopNavDestination.home => const HomeScreen(),
-                          DesktopNavDestination.allDocuments ||
-                          DesktopNavDestination.recent ||
-                          DesktopNavDestination.favorites =>
-                            const LibraryScreen(),
-                          DesktopNavDestination.tools => const ToolsScreen(),
-                          DesktopNavDestination.settings =>
-                            const SettingsScreen(),
-                          DesktopNavDestination.activeDocument =>
-                            const HomeScreen(),
-                        },
+                                children: tabsState.openTabs
+                                    .map(
+                                      (tab) => DesktopReaderWorkspace(
+                                        key: ValueKey('workspace_${tab.id}'),
+                                        tab: tab,
+                                        onBackToHome: _navigateHome,
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
+                          if (!showReader)
+                            Positioned.fill(
+                              child: switch (_desktopDestination) {
+                                DesktopNavDestination.home => HomeScreen(
+                                  onNavigateToTools: () => setState(
+                                    () => _desktopDestination =
+                                        DesktopNavDestination.tools,
+                                  ),
+                                ),
+                                DesktopNavDestination.allDocuments ||
+                                DesktopNavDestination.recent ||
+                                DesktopNavDestination.favorites =>
+                                  const LibraryScreen(),
+                                DesktopNavDestination.tools =>
+                                  const ToolsScreen(),
+                                DesktopNavDestination.settings =>
+                                  const SettingsScreen(),
+                                DesktopNavDestination.activeDocument ||
+                                DesktopNavDestination.thumbnails ||
+                                DesktopNavDestination.bookmarks ||
+                                DesktopNavDestination.attachments => HomeScreen(
+                                  onNavigateToTools: () => setState(
+                                    () => _desktopDestination =
+                                        DesktopNavDestination.tools,
+                                  ),
+                                ),
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
 
-          // Docked Bottom Status Bar (when reader is visible)
-          if (showReader && activeTab != null) _buildActiveStatusBar(activeTab),
-        ],
+              // Docked Bottom Status Bar (when reader is visible)
+              if (showReader && activeTab != null)
+                _buildActiveStatusBar(activeTab),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -373,7 +453,10 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Widget _buildMobileShell(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _mobileIndex, children: _mobileDestinations),
+      body: IndexedStack(
+        index: _mobileIndex,
+        children: _getMobileDestinations(),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _mobileIndex,
         onDestinationSelected: (index) => setState(() => _mobileIndex = index),

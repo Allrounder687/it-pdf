@@ -2,14 +2,23 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../app/theme/app_theme.dart';
 import '../../features/reader/domain/document_tab.dart';
 import '../../features/reader/domain/document_tabs_notifier.dart';
 
-/// Horizontal multi-document tab bar with context menus and dirty-state indicators.
+/// Horizontal multi-document tab bar with context menus, dirty indicators,
+/// and dedicated Home navigation.
 class DesktopTabBar extends ConsumerWidget {
   final VoidCallback onNewTab;
+  final VoidCallback? onBackToHome;
+  final ValueChanged<int>? onTabSelected;
 
-  const DesktopTabBar({super.key, required this.onNewTab});
+  const DesktopTabBar({
+    super.key,
+    required this.onNewTab,
+    this.onBackToHome,
+    this.onTabSelected,
+  });
 
   void _showContextMenu(
     BuildContext context,
@@ -78,14 +87,23 @@ class DesktopTabBar extends ConsumerWidget {
     final tabsState = ref.watch(documentTabsNotifierProvider);
     final notifier = ref.read(documentTabsNotifierProvider.notifier);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF131B2A) : const Color(0xFFE2E8F0);
-    final tabActiveBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final bg = isDark
+        ? AppTheme.darkSurfaceVariant
+        : AppTheme.lightSurfaceVariant;
+    final tabActiveBg = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
     final tabInactiveBg = isDark
-        ? const Color(0xFF0F172A)
-        : const Color(0xFFF1F5F9);
-    final borderColor = isDark
-        ? const Color(0xFF334155)
-        : const Color(0xFFCBD5E1);
+        ? AppTheme.darkSurfaceVariant
+        : AppTheme.lightSurfaceVariant;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final textPrimary = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final textSecondary = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+    final accentColor = isDark
+        ? AppTheme.primaryBlueDark
+        : AppTheme.primaryBlue;
 
     if (tabsState.openTabs.isEmpty) {
       return Container(
@@ -94,15 +112,51 @@ class DesktopTabBar extends ConsumerWidget {
         color: bg,
         child: Row(
           children: [
-            const Icon(
-              Icons.picture_as_pdf_outlined,
-              size: 14,
-              color: Colors.grey,
-            ),
+            if (onBackToHome != null) ...[
+              Tooltip(
+                message: 'Back to Home Screen (Alt+Left)',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: onBackToHome,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.home_outlined,
+                          size: 15,
+                          color: textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Home',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                height: 16,
+                width: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                color: borderColor,
+              ),
+            ],
+            Icon(Icons.picture_as_pdf_outlined, size: 14, color: textSecondary),
             const SizedBox(width: 6),
-            const Text(
+            Text(
               'No documents open',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
+              style: TextStyle(fontSize: 11, color: textSecondary),
             ),
             const SizedBox(width: 8),
             IconButton(
@@ -117,13 +171,50 @@ class DesktopTabBar extends ConsumerWidget {
     }
 
     return Container(
-      height: 36,
+      height: 34,
       decoration: BoxDecoration(
         color: bg,
         border: Border(bottom: BorderSide(color: borderColor, width: 1)),
       ),
       child: Row(
         children: [
+          if (onBackToHome != null) ...[
+            Tooltip(
+              message: 'Back to Home Screen (Alt+Left)',
+              child: InkWell(
+                onTap: onBackToHome,
+                child: Container(
+                  height: 34,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      right: BorderSide(color: borderColor, width: 1),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.arrow_back_rounded,
+                        size: 14,
+                        color: textSecondary,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Home',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
           Expanded(
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
@@ -143,11 +234,14 @@ class DesktopTabBar extends ConsumerWidget {
                     );
                   },
                   child: InkWell(
-                    onTap: () => notifier.switchToTab(index),
+                    onTap: () {
+                      notifier.switchToTab(index);
+                      onTabSelected?.call(index);
+                    },
                     child: Container(
                       constraints: const BoxConstraints(
                         minWidth: 120,
-                        maxWidth: 200,
+                        maxWidth: 220,
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       decoration: BoxDecoration(
@@ -155,10 +249,7 @@ class DesktopTabBar extends ConsumerWidget {
                         border: Border(
                           right: BorderSide(color: borderColor, width: 1),
                           top: isActive
-                              ? const BorderSide(
-                                  color: Colors.blueAccent,
-                                  width: 2,
-                                )
+                              ? BorderSide(color: accentColor, width: 2)
                               : BorderSide.none,
                         ),
                       ),
@@ -166,8 +257,12 @@ class DesktopTabBar extends ConsumerWidget {
                         children: [
                           Icon(
                             Icons.picture_as_pdf,
-                            size: 14,
-                            color: isActive ? Colors.redAccent : Colors.grey,
+                            size: 13,
+                            color: isActive
+                                ? (isDark
+                                      ? const Color(0xFFF87171)
+                                      : const Color(0xFFDC2626))
+                                : textSecondary,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -178,11 +273,9 @@ class DesktopTabBar extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: isActive
-                                    ? FontWeight.bold
+                                    ? FontWeight.w600
                                     : FontWeight.normal,
-                                color: isActive
-                                    ? (isDark ? Colors.white : Colors.black87)
-                                    : Colors.grey,
+                                color: isActive ? textPrimary : textSecondary,
                               ),
                             ),
                           ),
@@ -192,16 +285,20 @@ class DesktopTabBar extends ConsumerWidget {
                               height: 6,
                               margin: const EdgeInsets.only(right: 6),
                               decoration: const BoxDecoration(
-                                color: Colors.amber,
+                                color: AppTheme.highlightAmber,
                                 shape: BoxShape.circle,
                               ),
                             ),
                           InkWell(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(3),
                             onTap: () => notifier.closeTab(index),
-                            child: const Padding(
-                              padding: EdgeInsets.all(2),
-                              child: Icon(Icons.close_rounded, size: 13),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 13,
+                                color: textSecondary,
+                              ),
                             ),
                           ),
                         ],

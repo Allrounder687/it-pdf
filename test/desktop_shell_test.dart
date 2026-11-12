@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:it_pdf/app/router/app_shell.dart';
 import 'package:it_pdf/core/providers.dart';
 import 'package:it_pdf/features/reader/domain/document_tabs_notifier.dart';
 import 'package:it_pdf/features/reader/domain/reader_state.dart';
@@ -62,6 +63,41 @@ void main() {
       await tester.pump();
       expect(shortcutsClicked, isTrue);
     });
+
+    testWidgets(
+      'renders Back to Home button when onBackToHome provided and triggers callback',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        bool backClicked = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: DesktopTitleBar(
+                activeDocumentName: 'annual_report_2026.pdf',
+                onBackToHome: () => backClicked = true,
+                onOpenPdf: () {},
+                onOpenCommandPalette: () {},
+                onToggleTheme: () {},
+                onShowShortcuts: () {},
+              ),
+            ),
+          ),
+        );
+
+        expect(
+          find.byTooltip('Back to Home Screen (Alt+Left)'),
+          findsOneWidget,
+        );
+        expect(find.text('Home'), findsOneWidget);
+        await tester.tap(find.byTooltip('Back to Home Screen (Alt+Left)'));
+        await tester.pump();
+        expect(backClicked, isTrue);
+      },
+    );
   });
 
   group('DesktopTabBar Tests', () {
@@ -140,6 +176,29 @@ void main() {
         );
       },
     );
+
+    testWidgets('renders Back to Home tab button and triggers callback', (
+      tester,
+    ) async {
+      bool backClicked = false;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: DesktopTabBar(
+                onNewTab: () {},
+                onBackToHome: () => backClicked = true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byTooltip('Back to Home Screen (Alt+Left)'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back to Home Screen (Alt+Left)'));
+      await tester.pump();
+      expect(backClicked, isTrue);
+    });
   });
 
   group('DesktopSidebar Tests', () {
@@ -325,5 +384,142 @@ void main() {
       await tester.pump();
       expect(toggleLeftInvoked, isTrue);
     });
+
+    testWidgets('renders Back to Home toolbar action and triggers callback', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      bool backClicked = false;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+          child: MaterialApp(
+            home: Scaffold(
+              body: DesktopReaderToolbar(
+                documentId: 'doc-test-456',
+                documentPath: '/sample.pdf',
+                currentPage: 1,
+                pageCount: 5,
+                currentZoom: 1.0,
+                currentLayout: ReaderLayout.continuousVertical,
+                currentTheme: ReaderThemeMode.light,
+                isLeftPanelOpen: false,
+                isRightPanelOpen: false,
+                isSearchOpen: false,
+                isDirty: false,
+                onBackToHome: () => backClicked = true,
+                onOpen: () {},
+                onSave: () {},
+                onSaveAs: () {},
+                onPrint: () {},
+                onPrevPage: () {},
+                onNextPage: () {},
+                onJumpToPage: (_) {},
+                onZoomIn: () {},
+                onZoomOut: () {},
+                onSetZoom: (_) {},
+                onFitWidth: () {},
+                onFitPage: () {},
+                onLayoutChanged: (_) {},
+                onThemeChanged: (_) {},
+                onToggleSearch: () {},
+                onToggleLeftPanel: () {},
+                onToggleRightPanel: () {},
+                onOpenPageOrganizer: () {},
+                onOpenPasswordProtect: () {},
+                onOpenProperties: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byTooltip('Back to Home Screen (Alt+Left)'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back to Home Screen (Alt+Left)'));
+      await tester.pump();
+      expect(backClicked, isTrue);
+    });
+  });
+
+  group('AppShell Desktop Navigation & State Preservation Tests', () {
+    testWidgets(
+      'switches between Home and active tabs preserving document state in memory',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+
+        final doc = DocumentMeta(
+          id: 'doc-preserve-1',
+          name: 'Report_2026.pdf',
+          path: '/docs/Report_2026.pdf',
+          sizeInBytes: 2048,
+          totalPages: 10,
+          lastOpened: DateTime.now(),
+          createdAt: DateTime.now(),
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            initialCliArgsProvider.overrideWithValue([]),
+          ],
+        );
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(home: AppShell()),
+          ),
+        );
+        await tester.pump();
+
+        // Initially on Home Screen
+        expect(find.text('No Documents Yet'), findsOneWidget);
+
+        // Open tab
+        container.read(documentTabsNotifierProvider.notifier).openTab(doc);
+        await tester.pump();
+        await tester.pump();
+
+        // Back to Home button is visible in title bar & tab bar
+        expect(find.byTooltip('Back to Home Screen (Alt+Left)'), findsWidgets);
+
+        // Click Back to Home
+        await tester.tap(
+          find.byTooltip('Back to Home Screen (Alt+Left)').first,
+        );
+        await tester.pump();
+        await tester.pump();
+
+        // Returning Home does NOT close tabs: Report_2026.pdf tab is still open!
+        expect(
+          find.descendant(
+            of: find.byType(DesktopTabBar),
+            matching: find.text('Report_2026.pdf'),
+          ),
+          findsOneWidget,
+        );
+
+        // Click tab again to return to reader
+        await tester.tap(
+          find.descendant(
+            of: find.byType(DesktopTabBar),
+            matching: find.text('Report_2026.pdf'),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        // Returned to reader
+        expect(find.byTooltip('Back to Home Screen (Alt+Left)'), findsWidgets);
+      },
+    );
   });
 }

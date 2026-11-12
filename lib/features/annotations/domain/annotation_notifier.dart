@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/pdf_engine/syncfusion_pdf_service.dart';
 import '../../../core/providers.dart';
+import '../../../core/storage/safe_document_storage.dart';
 import '../data/annotation_storage.dart';
 import 'annotation_model.dart';
 import 'annotation_state.dart';
@@ -27,6 +29,7 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
 
   AnnotationStorage get _storage => ref.read(annotationStorageProvider);
   SyncfusionPdfService get _pdfEngine => ref.read(syncfusionPdfServiceProvider);
+  SafeDocumentStorage get _safeStorage => ref.read(safeDocumentStorageProvider);
 
   @override
   AnnotationState build() {
@@ -326,12 +329,33 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
   /// Permanently burns all draft annotations into the PDF file structure (ISO 32000).
   /// Once validation succeeds, marks annotations as committed so they are no longer
   /// rendered in the overlay widget, preventing double-rendering.
+  /// If saving to a new file destination (Save As) and no annotations are pending,
+  /// the source document is safely replicated so the destination is never left empty.
   Future<bool> burnAnnotationsToFile(
     String sourceFilePath,
     String destinationPath,
   ) async {
     final toBurn = state.draftAnnotations;
     if (toBurn.isEmpty) {
+      if (sourceFilePath != destinationPath) {
+        try {
+          final src = File(sourceFilePath);
+          if (await src.exists()) {
+            final bytes = await src.readAsBytes();
+            final saveRes = await _safeStorage.transactionalSaveBytes(
+              targetPath: destinationPath,
+              bytes: bytes,
+            );
+            if (!saveRes.isSuccess) {
+              return false;
+            }
+          } else {
+            return false;
+          }
+        } catch (_) {
+          return false;
+        }
+      }
       state = state.copyWith(isDirty: false);
       return true;
     }
@@ -343,12 +367,14 @@ class AnnotationNotifier extends Notifier<AnnotationState> {
         outputPath: destinationPath,
       );
 
-      // Successfully burned: mark all as committed
-      final updated = state.annotations
-          .map((a) => a.copyWith(isCommitted: true))
-          .toList();
-      state = state.copyWith(annotations: updated, isDirty: false);
-      await _storage.saveAnnotations(documentId, updated);
+      // Successfully burned: mark all as committed only if saving original in-place
+      if (sourceFilePath == destinationPath) {
+        final updated = state.annotations
+            .map((a) => a.copyWith(isCommitted: true))
+            .toList();
+        state = state.copyWith(annotations: updated, isDirty: false);
+        await _storage.saveAnnotations(documentId, updated);
+      }
       return true;
     } catch (e) {
       return false;

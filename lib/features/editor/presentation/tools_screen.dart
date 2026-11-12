@@ -1,289 +1,427 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/platform/file_picker_service.dart';
-import '../../../core/providers.dart';
-import '../../library/domain/library_notifier.dart';
-import '../../page_organizer/domain/page_organizer_notifier.dart';
-import '../../signatures/presentation/signature_pad_dialog.dart';
+import '../../../app/theme/app_theme.dart';
+import 'tools/tools_registry.dart';
 
-/// Tools Screen providing conversion, merging, creation and signature utilities.
-class ToolsScreen extends ConsumerWidget {
+/// Friendly, Smallpdf-inspired PDF Tools Hub with colorful tool tiles,
+/// instant category filtering, search, and one-click execution.
+/// Each tool implementation resides cleanly in its own dedicated file under `tools/`.
+class ToolsScreen extends ConsumerStatefulWidget {
   const ToolsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final filePicker = ref.watch(filePickerServiceProvider);
-    final organizerService = ref.watch(pageOrganizerServiceProvider);
-    final libraryNotifier = ref.read(libraryNotifierProvider.notifier);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'PDF Tools',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _ToolCard(
-            icon: Icons.image_outlined,
-            title: 'Images to PDF',
-            description:
-                'Convert photos, scans and gallery images into a single clean PDF document.',
-            color: Colors.blueAccent,
-            onTap: () => _handleImagesToPdf(
-              context,
-              filePicker,
-              organizerService,
-              libraryNotifier,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _ToolCard(
-            icon: Icons.call_merge,
-            title: 'Merge PDF Documents',
-            description:
-                'Combine multiple PDF files into one continuous compiled document.',
-            color: Colors.teal,
-            onTap: () => _handleMergePdfs(
-              context,
-              filePicker,
-              organizerService,
-              libraryNotifier,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _ToolCard(
-            icon: Icons.note_add_outlined,
-            title: 'Create Blank PDF',
-            description:
-                'Generate a new blank notebook or drafting document ready for annotation.',
-            color: Colors.purpleAccent,
-            onTap: () => _handleCreateBlankPdf(
-              context,
-              filePicker,
-              organizerService,
-              libraryNotifier,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _ToolCard(
-            icon: Icons.draw_outlined,
-            title: 'Handwritten Signatures',
-            description:
-                'Draw, save and manage custom vector signatures for rapid document signing.',
-            color: Colors.orangeAccent,
-            onTap: () => _handleSignaturePad(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _handleImagesToPdf(
-    BuildContext context,
-    FilePickerService filePicker,
-    dynamic organizerService,
-    LibraryNotifier libraryNotifier,
-  ) async {
-    final images = await filePicker.pickImageFiles();
-    if (images.isEmpty) return;
-
-    final dest = await filePicker.getSaveDestinationPath(
-      defaultFileName: 'converted_images.pdf',
-    );
-    if (dest == null) return;
-
-    try {
-      await organizerService.convertImagesToPdf(
-        imagePaths: images,
-        outputPath: dest,
-      );
-      final doc = await libraryNotifier.importFileFromPath(dest);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Successfully created ${doc?.name ?? "PDF"}!'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Conversion failed: $e')));
-      }
-    }
-  }
-
-  Future<void> _handleMergePdfs(
-    BuildContext context,
-    FilePickerService filePicker,
-    dynamic organizerService,
-    LibraryNotifier libraryNotifier,
-  ) async {
-    final files = await filePicker.pickMultiplePdfFiles();
-    if (files.length < 2) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select at least 2 PDF files to merge.'),
-          ),
-        );
-      }
-      return;
-    }
-
-    final dest = await filePicker.getSaveDestinationPath(
-      defaultFileName: 'merged_document.pdf',
-    );
-    if (dest == null) return;
-
-    try {
-      await organizerService.mergePdfs(sourcePaths: files, outputPath: dest);
-      final doc = await libraryNotifier.importFileFromPath(dest);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Successfully merged into ${doc?.name ?? "PDF"}!'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Merge failed: $e')));
-      }
-    }
-  }
-
-  Future<void> _handleCreateBlankPdf(
-    BuildContext context,
-    FilePickerService filePicker,
-    dynamic organizerService,
-    LibraryNotifier libraryNotifier,
-  ) async {
-    final controller = TextEditingController(text: 'New Document');
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Create Blank Document'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Document Title'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final dest = await filePicker.getSaveDestinationPath(
-      defaultFileName: '${controller.text.trim()}.pdf',
-    );
-    if (dest == null) return;
-
-    try {
-      await organizerService.createBlankDocument(
-        title: controller.text.trim(),
-        outputPath: dest,
-      );
-      await libraryNotifier.importFileFromPath(dest);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Created ${controller.text.trim()}!')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Creation failed: $e')));
-      }
-    }
-  }
-
-  Future<void> _handleSignaturePad(BuildContext context) async {
-    final result = await showDialog<dynamic>(
-      context: context,
-      builder: (ctx) => const SignaturePadDialog(),
-    );
-    if (result != null && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Signature profile saved!')));
-    }
-  }
+  ConsumerState<ToolsScreen> createState() => _ToolsScreenState();
 }
 
-class _ToolCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-  final Color color;
-  final VoidCallback onTap;
+class _ToolsScreenState extends ConsumerState<ToolsScreen> {
+  ToolCategory _selectedCategory = ToolCategory.all;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
-  const _ToolCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.color,
-    required this.onTap,
-  });
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.trim().toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: color, size: 28),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final textSecondary = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+
+    final filteredTools = registeredPdfTools.where((tool) {
+      final matchesCategory =
+          _selectedCategory == ToolCategory.all ||
+          tool.category == _selectedCategory;
+      if (!matchesCategory) return false;
+      if (_searchQuery.isEmpty) return true;
+
+      return tool.title.toLowerCase().contains(_searchQuery) ||
+          tool.description.toLowerCase().contains(_searchQuery) ||
+          tool.searchKeywords.any((k) => k.contains(_searchQuery));
+    }).toList();
+
+    return Scaffold(
+      backgroundColor: isDark ? AppTheme.darkBg : AppTheme.lightBg,
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.toolTeal.withValues(alpha: isDark ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+              child: const Icon(
+                Icons.grid_view_rounded,
+                color: AppTheme.toolTeal,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'PDF Tools Hub',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: CustomScrollView(
+        slivers: [
+          // Header / Search & Category Banner
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'What would you like to do today?',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: textPrimary,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'All PDF utilities operate 100% locally and securely on your device with ISO 32000 precision.',
+                    style: TextStyle(fontSize: 13, color: textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Search Bar
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppTheme.darkSurface
+                          : AppTheme.lightSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark
+                            ? AppTheme.darkBorder
+                            : AppTheme.lightBorder,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText:
+                            'Search tools (e.g. merge, organize, protect, sign, ai)...',
+                        hintStyle: TextStyle(
+                          color: textSecondary,
+                          fontSize: 13,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: textSecondary,
+                          size: 20,
+                        ),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded, size: 18),
+                                onPressed: () => _searchController.clear(),
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                      ),
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Category Filter Chips
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: ToolCategory.values.map((cat) {
+                        final isSelected = _selectedCategory == cat;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            avatar: Icon(
+                              cat.icon,
+                              size: 16,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark
+                                        ? AppTheme.darkTextSecondary
+                                        : AppTheme.lightTextSecondary),
+                            ),
+                            label: Text(cat.label),
+                            selected: isSelected,
+                            onSelected: (_) {
+                              setState(() => _selectedCategory = cat);
+                            },
+                            selectedColor: AppTheme.primaryBlue,
+                            backgroundColor: isDark
+                                ? AppTheme.darkSurface
+                                : AppTheme.lightSurface,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : textPrimary,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              fontSize: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? Colors.transparent
+                                    : (isDark
+                                          ? AppTheme.darkBorder
+                                          : AppTheme.lightBorder),
+                              ),
+                            ),
+                            showCheckmark: false,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Tools Grid
+          if (filteredTools.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.search_off_rounded,
+                        size: 48,
+                        color: textSecondary,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No tools matched "$_searchQuery"',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Try searching for merge, protect, split, images, sign, or blank.',
+                        style: TextStyle(fontSize: 13, color: textSecondary),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(width: 8),
-              const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-            ],
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              sliver: SliverLayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.crossAxisExtent;
+                  final crossAxisCount = width > 1100
+                      ? 4
+                      : width > 750
+                      ? 3
+                      : width > 480
+                      ? 2
+                      : 1;
+
+                  return SliverGrid(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                      mainAxisExtent: 148,
+                    ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final tool = filteredTools[index];
+                      return _SmallpdfToolCard(
+                        tool: tool,
+                        onTap: () => tool.execute(context, ref),
+                      );
+                    }, childCount: filteredTools.length),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tactile, colorful micro-card inspired by Smallpdf's signature design.
+class _SmallpdfToolCard extends StatefulWidget {
+  final PdfTool tool;
+  final VoidCallback onTap;
+
+  const _SmallpdfToolCard({required this.tool, required this.onTap});
+
+  @override
+  State<_SmallpdfToolCard> createState() => _SmallpdfToolCardState();
+}
+
+class _SmallpdfToolCardState extends State<_SmallpdfToolCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final textSecondary = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+
+    final baseBorderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final activeBorderColor = widget.tool.color.withValues(alpha: 0.6);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.translationValues(0, _isHovered ? -2.5 : 0, 0),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _isHovered ? activeBorderColor : baseBorderColor,
+            width: _isHovered ? 1.5 : 1.0,
+          ),
+          boxShadow: _isHovered
+              ? [
+                  BoxShadow(
+                    color: widget.tool.color.withValues(
+                      alpha: isDark ? 0.2 : 0.12,
+                    ),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: widget.onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top Row: Icon in Pastel Container + Optional Badge
+                  Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: widget.tool.color.withValues(
+                            alpha: isDark ? 0.18 : 0.10,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          widget.tool.icon,
+                          color: widget.tool.color,
+                          size: 20,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (widget.tool.badge != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: widget.tool.color.withValues(
+                              alpha: isDark ? 0.18 : 0.10,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            widget.tool.badge!,
+                            style: TextStyle(
+                              color: widget.tool.color,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const Spacer(),
+
+                  // Title
+                  Text(
+                    widget.tool.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14.5,
+                      color: textPrimary,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+
+                  // Subtitle / Description
+                  Text(
+                    widget.tool.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: textSecondary,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

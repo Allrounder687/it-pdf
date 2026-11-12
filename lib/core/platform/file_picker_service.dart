@@ -101,6 +101,16 @@ class FilePickerService {
     }
   }
 
+  /// Prompt user to pick a target folder/directory (e.g. for batch exports).
+  Future<String?> pickDirectoryPath({String? dialogTitle}) async {
+    try {
+      return await FilePicker.getDirectoryPath(dialogTitle: dialogTitle);
+    } catch (e, st) {
+      AppLogger.error('Error picking directory path', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
   /// Prompt user to choose export/save path for a PDF file or return default safe path.
   Future<String?> getSaveDestinationPath({
     required String defaultFileName,
