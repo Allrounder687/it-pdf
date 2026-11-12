@@ -20,7 +20,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('IT PDF'), findsAtLeast(1));
-    expect(find.text('No Documents Yet'), findsOneWidget);
+    expect(find.textContaining('IT PDF'), findsAtLeast(1));
+    expect(find.text('IT PDF Tools Studio'), findsOneWidget);
   });
 }

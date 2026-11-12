@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../features/editor/presentation/tools_screen.dart';
+import '../../features/history/presentation/processing_history_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/library/domain/library_notifier.dart';
 import '../../features/library/presentation/library_screen.dart';
@@ -388,29 +389,21 @@ class _AppShellState extends ConsumerState<AppShell> {
                           if (!showReader)
                             Positioned.fill(
                               child: switch (_desktopDestination) {
-                                DesktopNavDestination.home => HomeScreen(
-                                  onNavigateToTools: () => setState(
-                                    () => _desktopDestination =
-                                        DesktopNavDestination.tools,
-                                  ),
-                                ),
+                                DesktopNavDestination.home ||
+                                DesktopNavDestination.tools =>
+                                  const HomeScreen(),
                                 DesktopNavDestination.allDocuments ||
-                                DesktopNavDestination.recent ||
                                 DesktopNavDestination.favorites =>
                                   const LibraryScreen(),
-                                DesktopNavDestination.tools =>
-                                  const ToolsScreen(),
+                                DesktopNavDestination.recent =>
+                                  const ProcessingHistoryScreen(),
                                 DesktopNavDestination.settings =>
                                   const SettingsScreen(),
                                 DesktopNavDestination.activeDocument ||
                                 DesktopNavDestination.thumbnails ||
                                 DesktopNavDestination.bookmarks ||
-                                DesktopNavDestination.attachments => HomeScreen(
-                                  onNavigateToTools: () => setState(
-                                    () => _desktopDestination =
-                                        DesktopNavDestination.tools,
-                                  ),
-                                ),
+                                DesktopNavDestination.attachments =>
+                                  const HomeScreen(),
                               },
                             ),
                         ],

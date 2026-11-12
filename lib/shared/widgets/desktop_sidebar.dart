@@ -172,37 +172,23 @@ class DesktopSidebar extends StatelessWidget {
           _buildItem(
             context: context,
             destination: DesktopNavDestination.home,
-            icon: Icons.home_outlined,
-            selectedIcon: Icons.home_rounded,
-            label: 'Home',
+            icon: Icons.grid_view_rounded,
+            selectedIcon: Icons.grid_view_rounded,
+            label: 'Tools Studio',
           ),
           _buildItem(
             context: context,
             destination: DesktopNavDestination.allDocuments,
             icon: Icons.folder_outlined,
             selectedIcon: Icons.folder_rounded,
-            label: 'All Documents',
+            label: 'Uploaded Files',
           ),
           _buildItem(
             context: context,
             destination: DesktopNavDestination.recent,
             icon: Icons.history_rounded,
             selectedIcon: Icons.history_rounded,
-            label: 'Recent',
-          ),
-          _buildItem(
-            context: context,
-            destination: DesktopNavDestination.favorites,
-            icon: Icons.star_border_rounded,
-            selectedIcon: Icons.star_rounded,
-            label: 'Favorites',
-          ),
-          _buildItem(
-            context: context,
-            destination: DesktopNavDestination.tools,
-            icon: Icons.build_outlined,
-            selectedIcon: Icons.build_rounded,
-            label: 'PDF Tools',
+            label: 'Task History',
           ),
 
           if (hasActiveDocument) ...[

@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum ToolCategory {
   all('All Tools', Icons.apps_rounded),
+  edit('Edit & Visual', Icons.edit_note_rounded),
   organize('Organize & Pages', Icons.view_quilt_rounded),
   convert('Convert & Create', Icons.transform_rounded),
   optimize('Optimize & Stamp', Icons.auto_fix_high_rounded),
   security('Security & Sign', Icons.verified_user_rounded),
-  ai('AI Assistant', Icons.auto_awesome_rounded);
+  ai('Insights & AI', Icons.insights_rounded);
 
   final String label;
   final IconData icon;

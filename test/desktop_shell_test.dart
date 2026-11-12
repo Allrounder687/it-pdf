@@ -231,17 +231,15 @@ void main() {
         ),
       );
 
-      expect(find.text('Home'), findsOneWidget);
-      expect(find.text('All Documents'), findsOneWidget);
-      expect(find.text('Recent'), findsOneWidget);
-      expect(find.text('Favorites'), findsOneWidget);
-      expect(find.text('PDF Tools'), findsOneWidget);
+      expect(find.text('Tools Studio'), findsOneWidget);
+      expect(find.text('Uploaded Files'), findsOneWidget);
+      expect(find.text('Task History'), findsOneWidget);
       expect(find.text('Active Reader'), findsOneWidget);
 
-      // Tap Tools destination
-      await tester.tap(find.text('PDF Tools'));
+      // Tap Task History destination
+      await tester.tap(find.text('Task History'));
       await tester.pump();
-      expect(selectedDest, DesktopNavDestination.tools);
+      expect(selectedDest, DesktopNavDestination.recent);
 
       // Tap Collapse toggle
       await tester.tap(find.text('Collapse'));
@@ -480,8 +478,8 @@ void main() {
         );
         await tester.pump();
 
-        // Initially on Home Screen
-        expect(find.text('No Documents Yet'), findsOneWidget);
+        // Initially on Home Screen (Desktop Tools Studio)
+        expect(find.text('IT PDF Tools Studio'), findsOneWidget);
 
         // Open tab
         container.read(documentTabsNotifierProvider.notifier).openTab(doc);

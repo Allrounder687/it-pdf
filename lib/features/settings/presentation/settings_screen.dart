@@ -6,7 +6,7 @@ import '../../../core/storage/preferences_service.dart';
 
 const String _appVersion = String.fromEnvironment(
   'APP_VERSION',
-  defaultValue: '1.2.1+4',
+  defaultValue: '1.2.2+5',
 );
 
 /// Provider for active theme mode ('system', 'light', 'dark').

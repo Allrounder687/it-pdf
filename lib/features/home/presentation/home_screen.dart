@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/pdf_engine/pdf_thumbnail_cache.dart';
 import '../../../shared/models/document_meta.dart';
+import '../../editor/domain/tool_task_notifier.dart';
+import '../../editor/presentation/tools/tool_preview_modal.dart';
 import '../../editor/presentation/tools/tools_registry.dart';
 import '../../editor/presentation/tools_screen.dart';
 import '../../library/domain/library_notifier.dart';
@@ -29,6 +31,11 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
+    if (isDesktop) {
+      return const _DesktopToolsCommandCenter();
+    }
+
     final state = ref.watch(libraryNotifierProvider);
     final notifier = ref.read(libraryNotifierProvider.notifier);
 
@@ -401,7 +408,7 @@ class _ContinueReadingCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Page ${doc.lastPageRead} of ${doc.totalPages} • ${doc.formattedSize}',
+                      'Page ${doc.lastPageRead} of ${doc.totalPages} â€¢ ${doc.formattedSize}',
                       style: TextStyle(
                         color: isDark
                             ? AppTheme.darkTextSecondary
@@ -485,7 +492,7 @@ class _RecentDocListTile extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
         subtitle: Text(
-          'Page ${doc.lastPageRead}/${doc.totalPages} • ${doc.formattedSize}',
+          'Page ${doc.lastPageRead}/${doc.totalPages} â€¢ ${doc.formattedSize}',
           style: const TextStyle(fontSize: 12),
         ),
         trailing: IconButton(
@@ -769,6 +776,794 @@ class _PopularToolTileState extends State<_PopularToolTile> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Strictly monochrome (Black / White / Gray) Desktop Tools Command Center
+/// with status colors (Yellow = Running, Green = Completed, Red = Error),
+/// click-to-preview popups, dockable multi-task tray, and top-right toasts.
+class _DesktopToolsCommandCenter extends ConsumerStatefulWidget {
+  const _DesktopToolsCommandCenter();
+
+  @override
+  ConsumerState<_DesktopToolsCommandCenter> createState() =>
+      _DesktopToolsCommandCenterState();
+}
+
+class _DesktopToolsCommandCenterState
+    extends ConsumerState<_DesktopToolsCommandCenter> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  ToolCategory _selectedCategory = ToolCategory.all;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openToolPreview(PdfTool tool) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => ToolPreviewModal(
+        tool: tool,
+        onMinimizeToTray: () {
+          ref
+              .read(toolTaskManagerProvider.notifier)
+              .startTask(
+                toolId: tool.id,
+                toolTitle: tool.title,
+                toolIcon: tool.icon,
+                initialMessage: 'Ready & docked in Task Tray â€” tap to resume',
+              );
+          Navigator.of(dialogCtx).pop();
+        },
+        onOpenFullscreen: () => _runTrackedTool(tool),
+      ),
+    );
+  }
+
+  Future<void> _runTrackedTool(PdfTool tool) async {
+    final taskNotifier = ref.read(toolTaskManagerProvider.notifier);
+    final task = taskNotifier.startTask(
+      toolId: tool.id,
+      toolTitle: tool.title,
+      toolIcon: tool.icon,
+      initialMessage: 'Running ${tool.title}...',
+    );
+
+    try {
+      await tool.execute(context, ref);
+      taskNotifier.completeTask(
+        task.id,
+        outputPath: '',
+        message: '${tool.title} finished cleanly.',
+      );
+    } catch (e) {
+      taskNotifier.failTask(task.id, error: e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tasks = ref.watch(toolTaskManagerProvider);
+    final notifications = ref.watch(inAppNotificationsProvider);
+
+    // 3-Color Strict Palette: Obsidian Black / Crisp White / Neutral Slate Gray
+    final canvasBg = isDark ? const Color(0xFF090B10) : const Color(0xFFF8FAFC);
+    final surfaceBg = isDark ? const Color(0xFF11141C) : Colors.white;
+    final borderCol = isDark
+        ? const Color(0xFF222733)
+        : const Color(0xFFE2E8F0);
+    final textPrimary = isDark
+        ? const Color(0xFFF8FAFC)
+        : const Color(0xFF0F172A);
+    final textSecondary = isDark
+        ? const Color(0xFF94A3B8)
+        : const Color(0xFF64748B);
+
+    final query = _searchQuery.trim().toLowerCase();
+    final filteredTools = registeredPdfTools.where((tool) {
+      final matchesCategory =
+          _selectedCategory == ToolCategory.all ||
+          tool.category == _selectedCategory;
+      if (!matchesCategory) return false;
+      if (query.isEmpty) return true;
+      return tool.title.toLowerCase().contains(query) ||
+          tool.description.toLowerCase().contains(query) ||
+          tool.searchKeywords.any((k) => k.toLowerCase().contains(query));
+    }).toList();
+
+    return Scaffold(
+      backgroundColor: canvasBg,
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              // Clean Monochrome Studio Header
+              Container(
+                padding: const EdgeInsets.fromLTRB(28, 22, 28, 16),
+                decoration: BoxDecoration(
+                  color: surfaceBg,
+                  border: Border(bottom: BorderSide(color: borderCol)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1A1F2B)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: borderCol),
+                          ),
+                          child: Icon(
+                            Icons.picture_as_pdf_rounded,
+                            size: 20,
+                            color: textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'IT PDF Tools Studio',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  color: textPrimary,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
+                              Text(
+                                'Select any tool to preview capabilities, run concurrently, or launch fullscreen.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Search Input
+                        SizedBox(
+                          width: 280,
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (v) => setState(() => _searchQuery = v),
+                            style: TextStyle(fontSize: 13, color: textPrimary),
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Search ${registeredPdfTools.length} tools...',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: textSecondary,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search_rounded,
+                                size: 18,
+                                color: textSecondary,
+                              ),
+                              suffixIcon: _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.close, size: 16),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => _searchQuery = '');
+                                      },
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: canvasBg,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: borderCol),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: borderCol),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(
+                                  color: textPrimary,
+                                  width: 1.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Monochrome Category Filter Strip
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: ToolCategory.values.map((cat) {
+                          final selected = _selectedCategory == cat;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: () =>
+                                  setState(() => _selectedCategory = cat),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 140),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: selected ? textPrimary : canvasBg,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: selected ? textPrimary : borderCol,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      cat.icon,
+                                      size: 14,
+                                      color: selected
+                                          ? canvasBg
+                                          : textSecondary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      cat.label,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: selected
+                                            ? canvasBg
+                                            : textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Main All-Tools Grid Canvas
+              Expanded(
+                child: filteredTools.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No tools match "$_searchQuery".',
+                          style: TextStyle(color: textSecondary, fontSize: 14),
+                        ),
+                      )
+                    : GridView.builder(
+                        padding: EdgeInsets.fromLTRB(
+                          28,
+                          24,
+                          28,
+                          tasks.isNotEmpty ? 96 : 28,
+                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 340,
+                              mainAxisExtent: 162,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                            ),
+                        itemCount: filteredTools.length,
+                        itemBuilder: (context, index) {
+                          final tool = filteredTools[index];
+                          final activeTask = tasks.cast<ToolTask?>().firstWhere(
+                            (t) => t?.toolId == tool.id,
+                            orElse: () => null,
+                          );
+                          return _DesktopToolCard(
+                            tool: tool,
+                            activeTask: activeTask,
+                            isDark: isDark,
+                            surfaceBg: surfaceBg,
+                            borderCol: borderCol,
+                            textPrimary: textPrimary,
+                            textSecondary: textSecondary,
+                            onTap: () => _openToolPreview(tool),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+
+          // Docked Concurrent Multi-Task Tray at Bottom
+          if (tasks.isNotEmpty)
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 16,
+              child: _DesktopTaskTray(
+                tasks: tasks,
+                isDark: isDark,
+                surfaceBg: surfaceBg,
+                borderCol: borderCol,
+                textPrimary: textPrimary,
+                textSecondary: textSecondary,
+                onRestoreTool: (toolId) {
+                  final tool = registeredPdfTools.cast<PdfTool?>().firstWhere(
+                    (t) => t?.id == toolId,
+                    orElse: () => null,
+                  );
+                  if (tool != null) {
+                    _openToolPreview(tool);
+                  }
+                },
+                onDismissTask: (id) =>
+                    ref.read(toolTaskManagerProvider.notifier).dismissTask(id),
+                onClearCompleted: () =>
+                    ref.read(toolTaskManagerProvider.notifier).clearCompleted(),
+              ),
+            ),
+
+          // Top-Right Non-Intrusive Status Toast Overlay
+          if (notifications.isNotEmpty)
+            Positioned(
+              top: 16,
+              right: 20,
+              child: _TopRightNotificationsOverlay(
+                notifications: notifications,
+                isDark: isDark,
+                onDismiss: (id) =>
+                    ref.read(inAppNotificationsProvider.notifier).dismiss(id),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopToolCard extends StatefulWidget {
+  final PdfTool tool;
+  final ToolTask? activeTask;
+  final bool isDark;
+  final Color surfaceBg;
+  final Color borderCol;
+  final Color textPrimary;
+  final Color textSecondary;
+  final VoidCallback onTap;
+
+  const _DesktopToolCard({
+    required this.tool,
+    required this.activeTask,
+    required this.isDark,
+    required this.surfaceBg,
+    required this.borderCol,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.onTap,
+  });
+
+  @override
+  State<_DesktopToolCard> createState() => _DesktopToolCardState();
+}
+
+class _DesktopToolCardState extends State<_DesktopToolCard> {
+  bool _hovered = false;
+
+  Color? get _statusAccent {
+    switch (widget.activeTask?.status) {
+      case ToolTaskStatus.running:
+        return const Color(0xFFEAB308); // Yellow / Amber
+      case ToolTaskStatus.completed:
+        return const Color(0xFF10B981); // Green
+      case ToolTaskStatus.error:
+        return const Color(0xFFEF4444); // Red
+      default:
+        return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = _statusAccent;
+    final cardBorderColor = statusColor != null
+        ? statusColor.withAlpha(_hovered ? 220 : 150)
+        : (_hovered ? widget.textPrimary.withAlpha(140) : widget.borderCol);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: widget.surfaceBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: cardBorderColor,
+              width: statusColor != null || _hovered ? 1.5 : 1.0,
+            ),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: (statusColor ?? Colors.black).withAlpha(
+                        widget.isDark ? 40 : 15,
+                      ),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: widget.isDark
+                          ? const Color(0xFF1A1F2B)
+                          : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: widget.borderCol),
+                    ),
+                    child: Icon(
+                      widget.tool.icon,
+                      size: 20,
+                      color: statusColor ?? widget.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (statusColor != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withAlpha(30),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: statusColor.withAlpha(120)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            widget.activeTask!.status == ToolTaskStatus.running
+                                ? 'RUNNING'
+                                : (widget.activeTask!.status ==
+                                          ToolTaskStatus.completed
+                                      ? 'DONE'
+                                      : 'ERROR'),
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: statusColor,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: widget.isDark
+                            ? const Color(0xFF1A1F2B)
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        widget.tool.badge ?? widget.tool.category.label,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: widget.textSecondary,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                widget.tool.title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: widget.textPrimary,
+                  letterSpacing: -0.2,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: Text(
+                  widget.tool.description,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: widget.textSecondary,
+                    height: 1.35,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopTaskTray extends StatelessWidget {
+  final List<ToolTask> tasks;
+  final bool isDark;
+  final Color surfaceBg;
+  final Color borderCol;
+  final Color textPrimary;
+  final Color textSecondary;
+  final ValueChanged<String> onRestoreTool;
+  final ValueChanged<String> onDismissTask;
+  final VoidCallback onClearCompleted;
+
+  const _DesktopTaskTray({
+    required this.tasks,
+    required this.isDark,
+    required this.surfaceBg,
+    required this.borderCol,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.onRestoreTool,
+    required this.onDismissTask,
+    required this.onClearCompleted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 62,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: surfaceBg.withAlpha(245),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderCol, width: 1.4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(isDark ? 90 : 25),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.layers_rounded, size: 16, color: textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                'TASK TRAY (${tasks.length})',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                  color: textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          VerticalDivider(color: borderCol, width: 1),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: tasks.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final task = tasks[index];
+                Color statusCol;
+                IconData statusIcon;
+                switch (task.status) {
+                  case ToolTaskStatus.running:
+                    statusCol = const Color(0xFFEAB308);
+                    statusIcon = Icons.sync_rounded;
+                    break;
+                  case ToolTaskStatus.completed:
+                    statusCol = const Color(0xFF10B981);
+                    statusIcon = Icons.check_circle_rounded;
+                    break;
+                  case ToolTaskStatus.error:
+                    statusCol = const Color(0xFFEF4444);
+                    statusIcon = Icons.error_rounded;
+                    break;
+                  case ToolTaskStatus.idle:
+                    statusCol = textSecondary;
+                    statusIcon = Icons.hourglass_empty_rounded;
+                    break;
+                }
+
+                return InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => onRestoreTool(task.toolId),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: statusCol.withAlpha(22),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: statusCol.withAlpha(110)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(statusIcon, size: 14, color: statusCol),
+                        const SizedBox(width: 6),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
+                          child: Text(
+                            task.toolTitle,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        InkWell(
+                          onTap: () => onDismissTask(task.id),
+                          child: Icon(
+                            Icons.close,
+                            size: 14,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onClearCompleted,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              foregroundColor: textSecondary,
+            ),
+            child: const Text('Clear Done', style: TextStyle(fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopRightNotificationsOverlay extends StatelessWidget {
+  final List<InAppNotification> notifications;
+  final bool isDark;
+  final ValueChanged<String> onDismiss;
+
+  const _TopRightNotificationsOverlay({
+    required this.notifications,
+    required this.isDark,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: notifications.take(3).map((notif) {
+        final statusColor = notif.status == ToolTaskStatus.completed
+            ? const Color(0xFF10B981)
+            : (notif.status == ToolTaskStatus.error
+                  ? const Color(0xFFEF4444)
+                  : const Color(0xFFEAB308));
+        final icon = notif.status == ToolTaskStatus.completed
+            ? Icons.check_circle_rounded
+            : (notif.status == ToolTaskStatus.error
+                  ? Icons.error_rounded
+                  : Icons.info_rounded);
+
+        return Container(
+          width: 310,
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF111622) : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: statusColor.withAlpha(140), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(isDark ? 90 : 30),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 18, color: statusColor),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      notif.title,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      notif.message,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              InkWell(
+                onTap: () => onDismiss(notif.id),
+                child: const Icon(Icons.close, size: 14, color: Colors.grey),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

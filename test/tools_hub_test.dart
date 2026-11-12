@@ -5,11 +5,15 @@ import 'package:it_pdf/features/editor/presentation/tools/tools_registry.dart';
 import 'package:it_pdf/features/editor/presentation/tools_screen.dart';
 
 void main() {
-  test('registeredPdfTools contains 14 distinct standalone tools', () {
-    expect(registeredPdfTools.length, 14);
-    final ids = registeredPdfTools.map((t) => t.id).toSet();
-    expect(ids.length, 14);
-  });
+  test(
+    'registeredPdfTools contains 15 distinct standalone tools including Edit PDF',
+    () {
+      expect(registeredPdfTools.length, 15);
+      final ids = registeredPdfTools.map((t) => t.id).toSet();
+      expect(ids.length, 15);
+      expect(ids, contains('edit_pdf'));
+    },
+  );
 
   testWidgets('ToolsScreen renders hub, filters by category and search query', (
     WidgetTester tester,
@@ -31,6 +35,7 @@ void main() {
     expect(find.text('Protect & Permissions'), findsOneWidget);
 
     // Filter by Security & Sign category
+    await tester.ensureVisible(find.text('Security & Sign'));
     await tester.tap(find.text('Security & Sign'));
     await tester.pumpAndSettle();
 
@@ -39,6 +44,7 @@ void main() {
     expect(find.text('Merge PDF Studio'), findsNothing);
 
     // Switch back to All Tools and search
+    await tester.ensureVisible(find.text('All Tools'));
     await tester.tap(find.text('All Tools'));
     await tester.pumpAndSettle();
 

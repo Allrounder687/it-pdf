@@ -1,6 +1,7 @@
 import 'ai_assistant_tool.dart';
 import 'compress_pdf_tool.dart';
 import 'create_blank_pdf_tool.dart';
+import 'edit_pdf_tool.dart';
 import 'esign_pdf_tool.dart';
 import 'extract_text_tool.dart';
 import 'images_to_pdf_tool.dart';
@@ -16,8 +17,9 @@ import 'watermark_tool.dart';
 
 export 'pdf_tool_model.dart';
 
-/// Master registry of all 14 standalone PDF tools, each isolated in its own file.
+/// Master registry of all standalone PDF tools, each isolated in its own file.
 const List<PdfTool> registeredPdfTools = [
+  EditPdfTool(),
   CompressPdfTool(),
   MergePdfTool(),
   SplitPdfTool(),
@@ -36,6 +38,7 @@ const List<PdfTool> registeredPdfTools = [
 
 /// Quick-access subset displayed on the Home Screen launchpad.
 const List<PdfTool> popularPdfTools = [
+  EditPdfTool(),
   CompressPdfTool(),
   MergePdfTool(),
   SplitPdfTool(),

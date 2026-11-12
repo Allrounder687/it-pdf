@@ -61,7 +61,7 @@ void main() {
         );
         await tester.pump();
 
-        expect(find.text('No Documents Yet'), findsOneWidget);
+        expect(find.text('IT PDF Tools Studio'), findsOneWidget);
 
         // 3. Open a PDF document (Doc A)
         final tabsNotifier = container.read(

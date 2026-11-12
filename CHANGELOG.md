@@ -5,6 +5,16 @@ All notable changes to the **IT PDF** project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2+5] - 2026-11-12
+
+### Changed
+- **Desktop Monochrome Tools Studio:** Redesigned the desktop homepage (`HomeScreen`) around a 3-color Black / White / Gray palette featuring exclusively all 15 PDF tools with search and category pills.
+- **Added Dedicated Visual PDF Editor Tool:** Registered `EditPdfTool` ("Edit PDF & Visual Objects") directly inside the main tools catalog, launching directly into `WorkspaceMode.edit`.
+- **Interactive Preview Popup & Fullscreen Expander:** Added `ToolPreviewModal` showing tool capabilities, interactive PDF picker, inline fullscreen toggle, and minimize-to-tray action.
+- **Concurrent Multi-Tool Task Tray & Live Status Colors:** Added `ToolTaskManagerNotifier` and `InAppNotificationsNotifier` with a docked bottom Task Tray, Yellow (Running), Green (Completed), Red (Error) badges, and top-right toast alerts.
+- **Non-Obtrusive Sidebar Pages:** Updated `DesktopSidebar` and `AppShell` to house **Tools Studio**, **Uploaded Files**, **Task History** (`ProcessingHistoryScreen`), and **Settings**.
+- **1-Click Document Insights:** Replaced the confusing multi-step AI setup flow in `AiAssistantTool` with an offline 1-click Summary, Key Dates, and Action Items workbench.
+
 ## [1.2.1+4] - 2026-11-12
 
 ### Added
