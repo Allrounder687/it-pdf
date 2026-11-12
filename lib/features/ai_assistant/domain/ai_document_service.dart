@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 /// Grounded AI Document Assistant service.
 /// Analyzes extracted page text with strict citation guardrails [Page X].
 class AiDocumentService {
@@ -184,6 +187,193 @@ class AiDocumentService {
     }
 
     return AiResponse(answer: text, citedPages: pages.toList()..sort());
+  }
+
+  /// Queries a configured cloud AI provider (Gemini or OpenAI-compatible),
+  /// strictly grounded in extracted `[Page X]` text, with automatic fallback
+  /// to the offline grounded engine if unconfigured or unreachable.
+  Future<String> answerQuestionWithAi({
+    required String question,
+    required Map<int, String> pageTexts,
+    String provider = 'offline',
+    String apiKey = '',
+    String model = '',
+    String customEndpoint = '',
+  }) async {
+    final normalizedProvider = provider.trim().toLowerCase();
+    final trimmedKey = apiKey.trim();
+
+    if (normalizedProvider == 'offline' || trimmedKey.isEmpty) {
+      return queryDocument(pageTexts: pageTexts, query: question).answer;
+    }
+
+    final contextBuffer = StringBuffer();
+    final sortedKeys = pageTexts.keys.toList()..sort();
+    for (final pageNum in sortedKeys) {
+      final pageBody = (pageTexts[pageNum] ?? '').trim();
+      if (pageBody.isEmpty) continue;
+      if (contextBuffer.length + pageBody.length > 48000) {
+        contextBuffer.writeln(
+          '\n[Truncated remaining pages to stay within request context limit]',
+        );
+        break;
+      }
+      contextBuffer.writeln('--- [Page $pageNum] ---\n$pageBody\n');
+    }
+
+    final docContext = contextBuffer.toString().trim();
+    if (docContext.isEmpty) {
+      return 'No readable text content extracted from document.';
+    }
+
+    const systemPrompt =
+        'You are the IT PDF Document Assistant. Answer strictly using the '
+        'provided document excerpts and always cite sources as [Page X]. '
+        'If the answer is not in the document, state that clearly.';
+    final userPrompt =
+        'Document excerpts:\n$docContext\n\nUser request: $question';
+
+    try {
+      if (normalizedProvider == 'gemini') {
+        final resolvedModel = model.trim().isEmpty
+            ? 'gemini-2.5-flash'
+            : model.trim();
+        return await _queryGemini(
+          apiKey: trimmedKey,
+          model: resolvedModel,
+          systemPrompt: systemPrompt,
+          userPrompt: userPrompt,
+        );
+      }
+
+      if (normalizedProvider == 'openai') {
+        final resolvedModel = model.trim().isEmpty
+            ? 'gpt-4o-mini'
+            : model.trim();
+        return await _queryOpenAi(
+          apiKey: trimmedKey,
+          model: resolvedModel,
+          customEndpoint: customEndpoint.trim(),
+          systemPrompt: systemPrompt,
+          userPrompt: userPrompt,
+        );
+      }
+    } catch (e) {
+      final offlineFallback = queryDocument(
+        pageTexts: pageTexts,
+        query: question,
+      ).answer;
+      return '$offlineFallback\n\n_(Cloud AI fallback notice: $e)_';
+    }
+
+    return queryDocument(pageTexts: pageTexts, query: question).answer;
+  }
+
+  Future<String> _queryGemini({
+    required String apiKey,
+    required String model,
+    required String systemPrompt,
+    required String userPrompt,
+  }) async {
+    final uri = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/'
+      '${Uri.encodeComponent(model)}:generateContent?key=${Uri.encodeQueryComponent(apiKey)}',
+    );
+    final payload = {
+      'systemInstruction': {
+        'parts': [
+          {'text': systemPrompt},
+        ],
+      },
+      'contents': [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': userPrompt},
+          ],
+        },
+      ],
+    };
+
+    final body = await _postJson(uri: uri, payload: payload);
+    final decoded = jsonDecode(body) as Map<String, dynamic>;
+    final candidates = decoded['candidates'] as List<dynamic>?;
+    if (candidates == null || candidates.isEmpty) {
+      throw Exception('Gemini returned no candidates.');
+    }
+    final content = candidates.first['content'] as Map<String, dynamic>?;
+    final parts = content?['parts'] as List<dynamic>?;
+    final text = parts
+        ?.map((p) => (p as Map<String, dynamic>)['text']?.toString() ?? '')
+        .join('\n')
+        .trim();
+    if (text == null || text.isEmpty) {
+      throw Exception('Gemini returned an empty response.');
+    }
+    return text;
+  }
+
+  Future<String> _queryOpenAi({
+    required String apiKey,
+    required String model,
+    required String customEndpoint,
+    required String systemPrompt,
+    required String userPrompt,
+  }) async {
+    final endpointUrl = customEndpoint.isNotEmpty
+        ? customEndpoint
+        : 'https://api.openai.com/v1/chat/completions';
+    final uri = Uri.parse(endpointUrl);
+    final payload = {
+      'model': model,
+      'messages': [
+        {'role': 'system', 'content': systemPrompt},
+        {'role': 'user', 'content': userPrompt},
+      ],
+      'temperature': 0.2,
+    };
+
+    final body = await _postJson(
+      uri: uri,
+      payload: payload,
+      headers: {'Authorization': 'Bearer $apiKey'},
+    );
+    final decoded = jsonDecode(body) as Map<String, dynamic>;
+    final choices = decoded['choices'] as List<dynamic>?;
+    if (choices == null || choices.isEmpty) {
+      throw Exception('OpenAI-compatible endpoint returned no choices.');
+    }
+    final msg = choices.first['message'] as Map<String, dynamic>?;
+    final text = msg?['content']?.toString().trim() ?? '';
+    if (text.isEmpty) {
+      throw Exception('OpenAI-compatible endpoint returned empty content.');
+    }
+    return text;
+  }
+
+  Future<String> _postJson({
+    required Uri uri,
+    required Map<String, dynamic> payload,
+    Map<String, String> headers = const {},
+  }) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 20);
+    try {
+      final request = await client.postUrl(uri);
+      request.headers.contentType = ContentType.json;
+      headers.forEach(request.headers.set);
+      request.write(jsonEncode(payload));
+      final response = await request.close().timeout(
+        const Duration(seconds: 30),
+      );
+      final responseBody = await response.transform(utf8.decoder).join();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('HTTP ${response.statusCode}: $responseBody');
+      }
+      return responseBody;
+    } finally {
+      client.close(force: true);
+    }
   }
 }
 

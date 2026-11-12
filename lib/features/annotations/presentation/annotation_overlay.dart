@@ -29,45 +29,40 @@ class AnnotationOverlay extends ConsumerWidget {
     final pageAnnotations = annotationState.draftAnnotationsForPage(pageNumber);
 
     return Positioned.fill(
-      child: GestureDetector(
-        behavior: isToolActive
-            ? HitTestBehavior.opaque
-            : HitTestBehavior.translucent,
-        onPanStart: isToolActive
-            ? (details) {
-                final point = NormalizedPoint.fromOffset(
-                  details.localPosition,
-                  pageSize,
-                );
-                notifier.startDrawing(point);
-              }
-            : null,
-        onPanUpdate: isToolActive
-            ? (details) {
-                final point = NormalizedPoint.fromOffset(
-                  details.localPosition,
-                  pageSize,
-                );
-                notifier.updateDrawing(point);
-              }
-            : null,
-        onPanEnd: isToolActive
-            ? (_) {
-                notifier.finishDrawing(pageNumber);
-              }
-            : null,
-        child: CustomPaint(
-          size: pageSize,
-          painter: AnnotationPainter(
-            annotations: pageAnnotations,
-            activePoints: annotationState.isDrawing
-                ? annotationState.activePoints
-                : const [],
-            activeColor: annotationState.currentColor,
-            activeStrokeWidth: annotationState.currentStrokeWidth,
-            isDrawing: annotationState.isDrawing,
-            activeTool: annotationState.activeTool,
-            selectedId: annotationState.selectedAnnotationId,
+      child: IgnorePointer(
+        ignoring: !isToolActive,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (details) {
+            final point = NormalizedPoint.fromOffset(
+              details.localPosition,
+              pageSize,
+            );
+            notifier.startDrawing(point);
+          },
+          onPanUpdate: (details) {
+            final point = NormalizedPoint.fromOffset(
+              details.localPosition,
+              pageSize,
+            );
+            notifier.updateDrawing(point);
+          },
+          onPanEnd: (_) {
+            notifier.finishDrawing(pageNumber);
+          },
+          child: CustomPaint(
+            size: pageSize,
+            painter: AnnotationPainter(
+              annotations: pageAnnotations,
+              activePoints: annotationState.isDrawing
+                  ? annotationState.activePoints
+                  : const [],
+              activeColor: annotationState.currentColor,
+              activeStrokeWidth: annotationState.currentStrokeWidth,
+              isDrawing: annotationState.isDrawing,
+              activeTool: annotationState.activeTool,
+              selectedId: annotationState.selectedAnnotationId,
+            ),
           ),
         ),
       ),

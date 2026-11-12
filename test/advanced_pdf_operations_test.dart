@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:it_pdf/core/pdf_engine/advanced_pdf_operations.dart';
 import 'package:it_pdf/core/pdf_engine/syncfusion_pdf_service.dart';
 import 'package:path/path.dart' as p;
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 void main() {
   late Directory tempDir;
@@ -171,6 +172,71 @@ void main() {
       final unlockedSummary = await pdfService.inspectPdf(unlockedPath);
       expect(unlockedSummary.isEncrypted, isFalse);
       expect(unlockedSummary.pageCount, 3);
+    },
+  );
+
+  test(
+    'mergePdfsAdvanced preserves full landscape dimensions without right-edge cropping',
+    () async {
+      final landscapePath = p.join(tempDir.path, 'landscape_cert.pdf');
+      final landscapeDoc = PdfDocument();
+      landscapeDoc.pageSettings.margins.all = 0;
+      landscapeDoc.pageSettings.orientation = PdfPageOrientation.landscape;
+      landscapeDoc.pageSettings.size = PdfPageSize.a4;
+      landscapeDoc.pages.add().graphics.drawString(
+        'Landscape Certificate',
+        PdfStandardFont(PdfFontFamily.helvetica, 24),
+        bounds: const Rect.fromLTWH(40, 40, 600, 40),
+      );
+      await File(landscapePath).writeAsBytes(await landscapeDoc.save());
+      landscapeDoc.dispose();
+
+      final mergedOut = p.join(tempDir.path, 'merged_mixed_orientations.pdf');
+      await pdfService.mergePdfsAdvanced(
+        sources: [
+          PdfMergeSource(path: landscapePath),
+          PdfMergeSource(path: samplePdfB, pageNumbers: [1]),
+        ],
+        outputPath: mergedOut,
+      );
+
+      final outBytes = await File(mergedOut).readAsBytes();
+      final verifyDoc = PdfDocument(inputBytes: outBytes);
+      try {
+        expect(verifyDoc.pages.count, 2);
+        final page0Size = verifyDoc.pages[0].size;
+        final page1Size = verifyDoc.pages[1].size;
+        expect(page0Size.width, greaterThan(page0Size.height));
+        expect(page0Size.width, greaterThan(800));
+        expect(page1Size.height, greaterThan(page1Size.width));
+      } finally {
+        verifyDoc.dispose();
+      }
+    },
+  );
+
+  test(
+    'addWatermark supports direct fractional positioning and full-page tiling',
+    () async {
+      final tiledPath = p.join(tempDir.path, 'tiled_watermark.pdf');
+      await pdfService.addWatermark(
+        sourcePath: samplePdfB,
+        outputPath: tiledPath,
+        text: 'APPROVED',
+        fontSize: 32,
+        opacity: 0.35,
+        angleDegrees: -30,
+        color: Colors.green,
+        xFraction: 0.72,
+        yFraction: 0.25,
+        tiled: true,
+      );
+
+      final texts = await pdfService.extractDocumentText(tiledPath);
+      expect(texts.length, 3);
+      for (final pageText in texts.values) {
+        expect(pageText, contains('APPROVED'));
+      }
     },
   );
 }

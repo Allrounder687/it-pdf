@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers.dart';
+import '../../settings/presentation/settings_screen.dart';
 import '../domain/ai_document_service.dart';
 
 /// Interactive grounded AI Assistant modal sheet with citations and prompt chips.
-class AiAssistantSheet extends StatefulWidget {
+class AiAssistantSheet extends ConsumerStatefulWidget {
   final Map<int, String> pageTexts;
   final ValueChanged<int> onJumpToPage;
 
@@ -13,10 +16,10 @@ class AiAssistantSheet extends StatefulWidget {
   });
 
   @override
-  State<AiAssistantSheet> createState() => _AiAssistantSheetState();
+  ConsumerState<AiAssistantSheet> createState() => _AiAssistantSheetState();
 }
 
-class _AiAssistantSheetState extends State<AiAssistantSheet> {
+class _AiAssistantSheetState extends ConsumerState<AiAssistantSheet> {
   final AiDocumentService _aiService = AiDocumentService();
   final TextEditingController _queryController = TextEditingController();
   final List<_ChatMessage> _messages = [];
@@ -28,7 +31,7 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
     _messages.add(
       const _ChatMessage(
         text:
-            '👋 Hello! I am your grounded **IT PDF Assistant**. Ask any question about this document, or tap a quick action below.',
+            '👋 Hello! I am your grounded **IT PDF Assistant**. Ask any question about this document, tap a quick action below, or tap the gear icon above to configure a cloud AI API key.',
         isUser: false,
       ),
     );
@@ -40,50 +43,51 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
     super.dispose();
   }
 
-  void _runAction(String label, String Function() action) {
+  Future<void> _submitPrompt(String prompt, {String? displayLabel}) async {
+    final prefs = ref.read(preferencesServiceProvider);
+    final provider = prefs.getAiProvider();
+    final apiKey = prefs.getAiApiKey();
+    final model = prefs.getAiModel();
+    final customEndpoint = prefs.getAiCustomEndpoint();
+
     setState(() {
-      _messages.add(_ChatMessage(text: label, isUser: true));
+      _messages.add(_ChatMessage(text: displayLabel ?? prompt, isUser: true));
       _isAnalyzing = true;
     });
 
-    Future.delayed(const Duration(milliseconds: 300), () {
-      final answer = action();
-      if (mounted) {
-        setState(() {
-          _messages.add(_ChatMessage(text: answer, isUser: false));
-          _isAnalyzing = false;
-        });
-      }
-    });
+    final answer = await _aiService.answerQuestionWithAi(
+      question: prompt,
+      pageTexts: widget.pageTexts,
+      provider: provider,
+      apiKey: apiKey,
+      model: model,
+      customEndpoint: customEndpoint,
+    );
+
+    if (mounted) {
+      setState(() {
+        _messages.add(_ChatMessage(text: answer, isUser: false));
+        _isAnalyzing = false;
+      });
+    }
   }
 
   void _handleSend() {
     final text = _queryController.text.trim();
-    if (text.isEmpty) return;
-
+    if (text.isEmpty || _isAnalyzing) return;
     _queryController.clear();
-    setState(() {
-      _messages.add(_ChatMessage(text: text, isUser: true));
-      _isAnalyzing = true;
-    });
-
-    Future.delayed(const Duration(milliseconds: 400), () {
-      final answer = _aiService.answerQuestion(
-        question: text,
-        pageTexts: widget.pageTexts,
-      );
-      if (mounted) {
-        setState(() {
-          _messages.add(_ChatMessage(text: answer, isUser: false));
-          _isAnalyzing = false;
-        });
-      }
-    });
+    _submitPrompt(text);
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final prefs = ref.watch(preferencesServiceProvider);
+    final provider = prefs.getAiProvider();
+    final hasKey = prefs.getAiApiKey().trim().isNotEmpty;
+    final engineLabel = (provider != 'offline' && hasKey)
+        ? provider.toUpperCase()
+        : 'OFFLINE';
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.75,
@@ -104,7 +108,32 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
                   'AI Document Assistant',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
+                const SizedBox(width: 8),
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: const Icon(Icons.key_outlined, size: 14),
+                  label: Text(
+                    engineLabel,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  tooltip: 'Configure AI provider & API key',
+                  onPressed: () async {
+                    await showAiSettingsDialog(context);
+                    if (mounted) setState(() {});
+                  },
+                ),
                 const Spacer(),
+                IconButton(
+                  tooltip: 'AI API Key Settings',
+                  icon: const Icon(Icons.tune_rounded),
+                  onPressed: () async {
+                    await showAiSettingsDialog(context);
+                    if (mounted) setState(() {});
+                  },
+                ),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.of(context).pop(),
@@ -123,28 +152,27 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
                 ActionChip(
                   avatar: const Icon(Icons.summarize_outlined, size: 16),
                   label: const Text('Summarize PDF'),
-                  onPressed: () => _runAction(
-                    'Summarize this document',
-                    () => _aiService.generateSummary(widget.pageTexts),
-                  ),
+                  onPressed: _isAnalyzing
+                      ? null
+                      : () => _submitPrompt('Summarize this document'),
                 ),
                 const SizedBox(width: 8),
                 ActionChip(
                   avatar: const Icon(Icons.calendar_today_outlined, size: 16),
                   label: const Text('Key Dates'),
-                  onPressed: () => _runAction(
-                    'Extract key dates and deadlines',
-                    () => _aiService.extractKeyDates(widget.pageTexts),
-                  ),
+                  onPressed: _isAnalyzing
+                      ? null
+                      : () => _submitPrompt('Extract key dates and deadlines'),
                 ),
                 const SizedBox(width: 8),
                 ActionChip(
                   avatar: const Icon(Icons.task_alt, size: 16),
                   label: const Text('Action Items'),
-                  onPressed: () => _runAction(
-                    'Extract action items and obligations',
-                    () => _aiService.extractActionItems(widget.pageTexts),
-                  ),
+                  onPressed: _isAnalyzing
+                      ? null
+                      : () => _submitPrompt(
+                          'Extract action items and obligations',
+                        ),
                 ),
               ],
             ),

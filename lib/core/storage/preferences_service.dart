@@ -9,6 +9,10 @@ class PreferencesService {
   static const String _recentDocIdsKey = 'it_pdf_recent_doc_ids_v1';
   static const String _themeModeKey = 'it_pdf_theme_mode_v1';
   static const String _readingLayoutKey = 'it_pdf_reading_layout_v1';
+  static const String _aiProviderKey = 'it_pdf_ai_provider_v1';
+  static const String _aiApiKeyKey = 'it_pdf_ai_api_key_v1';
+  static const String _aiModelKey = 'it_pdf_ai_model_v1';
+  static const String _aiEndpointKey = 'it_pdf_ai_endpoint_v1';
 
   final SharedPreferences _prefs;
 
@@ -76,5 +80,45 @@ class PreferencesService {
   /// Set default reading layout.
   Future<bool> setReadingLayout(String layout) async {
     return await _prefs.setString(_readingLayoutKey, layout);
+  }
+
+  /// Get selected AI Document Assistant provider ('offline', 'gemini', 'openai').
+  String getAiProvider() {
+    return _prefs.getString(_aiProviderKey) ?? 'offline';
+  }
+
+  /// Persist selected AI Document Assistant provider.
+  Future<bool> setAiProvider(String provider) async {
+    return await _prefs.setString(_aiProviderKey, provider);
+  }
+
+  /// Get stored AI API key for cloud providers.
+  String getAiApiKey() {
+    return _prefs.getString(_aiApiKeyKey) ?? '';
+  }
+
+  /// Persist AI API key for cloud providers.
+  Future<bool> setAiApiKey(String apiKey) async {
+    return await _prefs.setString(_aiApiKeyKey, apiKey.trim());
+  }
+
+  /// Get configured AI model name.
+  String getAiModel() {
+    return _prefs.getString(_aiModelKey) ?? '';
+  }
+
+  /// Persist configured AI model name.
+  Future<bool> setAiModel(String model) async {
+    return await _prefs.setString(_aiModelKey, model.trim());
+  }
+
+  /// Get optional custom OpenAI-compatible base URL.
+  String getAiCustomEndpoint() {
+    return _prefs.getString(_aiEndpointKey) ?? '';
+  }
+
+  /// Persist optional custom OpenAI-compatible base URL.
+  Future<bool> setAiCustomEndpoint(String endpoint) async {
+    return await _prefs.setString(_aiEndpointKey, endpoint.trim());
   }
 }

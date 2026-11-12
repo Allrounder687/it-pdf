@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import '../../../../app/theme/app_theme.dart';
 import '../../../../core/pdf_engine/advanced_pdf_operations.dart';
+import '../../../../core/pdf_engine/pdf_thumbnail_cache.dart';
 import '../../../../core/providers.dart';
 import '../../../annotations/domain/annotation_notifier.dart';
 import '../../../library/domain/library_notifier.dart';
@@ -21,7 +22,7 @@ class WatermarkTool extends PdfTool {
 
   @override
   String get description =>
-      'Live preview & stamp diagonal or custom vector watermarks across pages.';
+      'Drag, rotate & resize watermarks directly on your PDF page or tile grids.';
 
   @override
   IconData get icon => Icons.branding_watermark_outlined;
@@ -43,6 +44,7 @@ class WatermarkTool extends PdfTool {
     'draft',
     'overlay',
     'brand',
+    'drag',
   ];
 
   @override
@@ -95,9 +97,12 @@ class _WatermarkStudioScreenState
     text: 'CONFIDENTIAL',
   );
   final TextEditingController _rangeController = TextEditingController();
-  double _fontSize = 52;
-  double _opacity = 0.25;
-  double _angleDegrees = -45;
+  double _fontSize = 48;
+  double _opacity = 0.35;
+  double _angleDegrees = -35;
+  double _xFraction = 0.5;
+  double _yFraction = 0.5;
+  bool _tiled = false;
   Color _color = const Color(0xFFDC2626);
   _WatermarkScope _scope = _WatermarkScope.all;
   bool _isApplying = false;
@@ -145,7 +150,7 @@ class _WatermarkStudioScreenState
 
     final filePicker = ref.read(filePickerServiceProvider);
     final baseName = p.basenameWithoutExtension(widget.sourcePath);
-    final dest = await filePicker.pickSaveFilePath(
+    final dest = await filePicker.resolveWritableOutputPath(
       defaultFileName: '${baseName}_watermarked.pdf',
       dialogTitle: 'Save Watermarked PDF',
     );
@@ -164,6 +169,9 @@ class _WatermarkStudioScreenState
             angleDegrees: _angleDegrees,
             color: _color,
             pageNumbers: _resolveTargetPages(),
+            xFraction: _xFraction,
+            yFraction: _yFraction,
+            tiled: _tiled,
           );
 
       final doc = await ref
@@ -197,26 +205,41 @@ class _WatermarkStudioScreenState
         : _textController.text;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Watermark Studio')),
+      appBar: AppBar(
+        title: const Text('Watermark Studio'),
+        actions: [
+          if (!_tiled)
+            TextButton.icon(
+              onPressed: () => setState(() {
+                _xFraction = 0.5;
+                _yFraction = 0.5;
+                _angleDegrees = -35;
+              }),
+              icon: const Icon(Icons.center_focus_strong_rounded, size: 16),
+              label: const Text('Center'),
+            ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 820;
           final controls = _buildControls();
-          final preview = _buildPreviewPane(text);
+          final preview = _buildInteractivePreviewPane(text);
 
           if (isWide) {
             return Row(
               children: [
-                Expanded(flex: 5, child: controls),
+                Expanded(flex: 4, child: controls),
                 const VerticalDivider(width: 1),
-                Expanded(flex: 4, child: preview),
+                Expanded(flex: 5, child: preview),
               ],
             );
           }
           return SingleChildScrollView(
             child: Column(
               children: [
-                SizedBox(height: 280, child: preview),
+                SizedBox(height: 360, child: preview),
                 const Divider(height: 1),
                 controls,
               ],
@@ -227,77 +250,237 @@ class _WatermarkStudioScreenState
     );
   }
 
-  Widget _buildPreviewPane(String text) {
+  Widget _buildInteractivePreviewPane(String text) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      color: Theme.of(context).brightness == Brightness.dark
-          ? const Color(0xFF0F172A)
-          : const Color(0xFFE2E8F0),
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: AspectRatio(
-          aspectRatio: 0.707,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(6),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.14),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
+      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.touch_app_rounded,
+                size: 14,
+                color: isDark ? Colors.white60 : Colors.black54,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _tiled
+                    ? 'Tiled repeat grid across entire page'
+                    : 'Drag watermark directly on page • Drag corner handle to rotate & scale',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: isDark ? Colors.white60 : Colors.black54,
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 0.707,
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final pageW = box.maxWidth;
+                    final pageH = box.maxHeight;
+                    final scaledFont = (_fontSize * (pageW / 595.0)).clamp(
+                      10.0,
+                      72.0,
+                    );
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.16),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // Live actual Page 1 PDF background
+                            PdfPageThumbnailView(
+                              documentPath: widget.sourcePath,
+                              pageNumber: 1,
+                              width: pageW.clamp(180, 460),
+                              height: pageH.clamp(220, 650),
+                            ),
+
+                            // Direct Interactive Watermark Overlay (clipped cleanly to PAGE bounds, never text bounds!)
+                            if (_tiled)
+                              _buildTiledPreview(text, scaledFont)
+                            else
+                              _buildDraggableWatermark(
+                                text: text,
+                                scaledFont: scaledFont,
+                                pageW: pageW,
+                                pageH: pageH,
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Subtle mock lines simulating document body
-                Padding(
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 140,
-                        height: 10,
-                        color: Colors.grey.shade300,
-                      ),
-                      const SizedBox(height: 16),
-                      for (int i = 0; i < 8; i++) ...[
-                        Container(
-                          width: i == 7 ? 120 : double.infinity,
-                          height: 6,
-                          color: Colors.grey.shade200,
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTiledPreview(String text, double scaledFont) {
+    return IgnorePointer(
+      child: Opacity(
+        opacity: _opacity.clamp(0.05, 1.0),
+        child: GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+          ),
+          itemCount: 12,
+          itemBuilder: (_, _) => Center(
+            child: Transform.rotate(
+              angle: _angleDegrees * math.pi / 180,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    color: _color,
+                    fontSize: scaledFont * 0.72,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                // Live watermark preview
-                ClipRect(
-                  child: Transform.rotate(
-                    angle: _angleDegrees * math.pi / 180,
-                    child: Opacity(
-                      opacity: _opacity.clamp(0.05, 1.0),
-                      child: Text(
-                        text,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: _color,
-                          fontSize: (_fontSize * 0.42).clamp(10.0, 48.0),
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDraggableWatermark({
+    required String text,
+    required double scaledFont,
+    required double pageW,
+    required double pageH,
+  }) {
+    final cx = pageW * _xFraction;
+    final cy = pageH * _yFraction;
+
+    return Stack(
+      children: [
+        Positioned(
+          left: cx,
+          top: cy,
+          child: FractionalTranslation(
+            translation: const Offset(-0.5, -0.5),
+            child: Transform.rotate(
+              angle: _angleDegrees * math.pi / 180,
+              child: GestureDetector(
+                onPanUpdate: (details) {
+                  // Convert rotated/local screen delta back to page coordinates
+                  final rad = _angleDegrees * math.pi / 180;
+                  final dxPage =
+                      details.delta.dx * math.cos(rad) -
+                      details.delta.dy * math.sin(rad);
+                  final dyPage =
+                      details.delta.dx * math.sin(rad) +
+                      details.delta.dy * math.cos(rad);
+                  setState(() {
+                    _xFraction = ((_xFraction * pageW + dxPage) / pageW).clamp(
+                      0.08,
+                      0.92,
+                    );
+                    _yFraction = ((_yFraction * pageH + dyPage) / pageH).clamp(
+                      0.08,
+                      0.92,
+                    );
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: AppTheme.toolIndigo.withValues(alpha: 0.75),
+                      width: 1.5,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                    color: AppTheme.toolIndigo.withValues(alpha: 0.04),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Opacity(
+                        opacity: _opacity.clamp(0.05, 1.0),
+                        child: Text(
+                          text,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                          style: TextStyle(
+                            color: _color,
+                            fontSize: scaledFont,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Direct Corner Handle for Rotation & Resize without sliders!
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanUpdate: (details) {
+                          setState(() {
+                            _angleDegrees =
+                                (_angleDegrees + details.delta.dy * 0.6).clamp(
+                                  -90.0,
+                                  90.0,
+                                );
+                            _fontSize = (_fontSize + details.delta.dx * 0.35)
+                                .clamp(16.0, 110.0);
+                          });
+                        },
+                        child: Tooltip(
+                          message:
+                              'Drag up/down to rotate • left/right to resize',
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: const BoxDecoration(
+                              color: AppTheme.toolIndigo,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.open_with_rounded,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -335,9 +518,23 @@ class _WatermarkStudioScreenState
                 )
                 .toList(),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
-          // Color Swatches
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Tile Across Entire Page',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+            ),
+            subtitle: const Text(
+              'Disable to freely drag & position anywhere on the page',
+              style: TextStyle(fontSize: 11.5),
+            ),
+            value: _tiled,
+            onChanged: (v) => setState(() => _tiled = v),
+          ),
+          const SizedBox(height: 10),
+
           Row(
             children: [
               const Text(
@@ -370,8 +567,8 @@ class _WatermarkStudioScreenState
           Text('Font Size: ${_fontSize.round()} pt'),
           Slider(
             value: _fontSize,
-            min: 20,
-            max: 96,
+            min: 16,
+            max: 110,
             onChanged: (v) => setState(() => _fontSize = v),
           ),
 
@@ -379,19 +576,25 @@ class _WatermarkStudioScreenState
           Slider(
             value: _opacity,
             min: 0.08,
-            max: 0.85,
+            max: 0.90,
             onChanged: (v) => setState(() => _opacity = v),
           ),
 
           Text('Rotation Angle: ${_angleDegrees.round()}°'),
           Slider(
             value: _angleDegrees,
-            min: -75,
-            max: 75,
+            min: -90,
+            max: 90,
             onChanged: (v) => setState(() => _angleDegrees = v),
           ),
 
-          const SizedBox(height: 10),
+          if (!_tiled)
+            Text(
+              'Position: X ${(100 * _xFraction).round()}% • Y ${(100 * _yFraction).round()}%',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+
+          const SizedBox(height: 12),
           const Text(
             'Target Pages',
             style: TextStyle(fontWeight: FontWeight.w600),
@@ -399,6 +602,7 @@ class _WatermarkStudioScreenState
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
+            runSpacing: 6,
             children: [
               ChoiceChip(
                 label: const Text('All Pages'),

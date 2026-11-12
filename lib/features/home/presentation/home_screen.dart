@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_theme.dart';
+import '../../../core/pdf_engine/pdf_thumbnail_cache.dart';
 import '../../../shared/models/document_meta.dart';
 import '../../editor/presentation/tools/tools_registry.dart';
 import '../../editor/presentation/tools_screen.dart';
@@ -359,7 +360,7 @@ class _ContinueReadingCard extends StatelessWidget {
             children: [
               Container(
                 width: 48,
-                height: 58,
+                height: 62,
                 decoration: BoxDecoration(
                   color: isDark
                       ? AppTheme.darkSurfaceVariant
@@ -369,12 +370,19 @@ class _ContinueReadingCard extends StatelessWidget {
                     color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
                   ),
                 ),
-                child: Icon(
-                  Icons.menu_book_rounded,
-                  color: isDark
-                      ? AppTheme.primaryBlueDark
-                      : AppTheme.primaryBlue,
-                  size: 24,
+                clipBehavior: Clip.antiAlias,
+                child: PdfPageThumbnailView(
+                  documentPath: doc.path,
+                  pageNumber: 1,
+                  width: 48,
+                  height: 62,
+                  placeholder: Icon(
+                    Icons.menu_book_rounded,
+                    color: isDark
+                        ? AppTheme.primaryBlueDark
+                        : AppTheme.primaryBlue,
+                    size: 24,
+                  ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -453,9 +461,22 @@ class _RecentDocListTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         onTap: onOpen,
-        leading: const Icon(
-          Icons.picture_as_pdf_outlined,
-          color: Colors.redAccent,
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            width: 36,
+            height: 46,
+            child: PdfPageThumbnailView(
+              documentPath: doc.path,
+              pageNumber: 1,
+              width: 36,
+              height: 46,
+              placeholder: const Icon(
+                Icons.picture_as_pdf_outlined,
+                color: Colors.redAccent,
+              ),
+            ),
+          ),
         ),
         title: Text(
           doc.name,

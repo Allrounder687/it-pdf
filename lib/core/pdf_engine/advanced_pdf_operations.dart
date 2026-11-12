@@ -127,6 +127,29 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
     }
   }
 
+  /// Clones a page into `targetDoc` preserving exact dimensions & landscape/portrait orientation.
+  static sf.PdfPage _appendClonedPage(
+    sf.PdfDocument targetDoc,
+    sf.PdfPage srcPage,
+  ) {
+    final srcSize = srcPage.size;
+    final template = srcPage.createTemplate();
+    final section = targetDoc.sections!.add();
+    section.pageSettings.margins.all = 0;
+    section.pageSettings.orientation = srcSize.width > srcSize.height
+        ? sf.PdfPageOrientation.landscape
+        : sf.PdfPageOrientation.portrait;
+    section.pageSettings.size = srcSize;
+
+    final newPage = section.pages.add();
+    newPage.graphics.drawPdfTemplate(
+      template,
+      const ui.Offset(0, 0),
+      ui.Size(srcSize.width, srcSize.height),
+    );
+    return newPage;
+  }
+
   /// Advanced merge supporting custom per-file page ranges, heterogeneous page sizes,
   /// stream compression, and clickable Table of Contents bookmarks per source file.
   Future<String> mergePdfsAdvanced({
@@ -155,18 +178,9 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
 
           for (final pageNum in targetPages) {
             if (pageNum < 1 || pageNum > srcDoc.pages.count) continue;
-            final srcPage = srcDoc.pages[pageNum - 1];
-            final template = srcPage.createTemplate();
-
-            final section = mergedDoc.sections!.add();
-            section.pageSettings.margins.all = 0;
-            section.pageSettings.size = srcPage.size;
-
-            final newPage = section.pages.add();
-            newPage.graphics.drawPdfTemplate(
-              template,
-              const ui.Offset(0, 0),
-              ui.Size(srcPage.size.width, srcPage.size.height),
+            final newPage = _appendClonedPage(
+              mergedDoc,
+              srcDoc.pages[pageNum - 1],
             );
             firstPageForSource ??= newPage;
           }
@@ -231,17 +245,7 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
         chunkDoc.compressionLevel = sf.PdfCompressionLevel.best;
         try {
           for (int i = start; i < end; i++) {
-            final srcPage = srcDoc.pages[i];
-            final template = srcPage.createTemplate();
-            final section = chunkDoc.sections!.add();
-            section.pageSettings.margins.all = 0;
-            section.pageSettings.size = srcPage.size;
-            final newPage = section.pages.add();
-            newPage.graphics.drawPdfTemplate(
-              template,
-              const ui.Offset(0, 0),
-              ui.Size(srcPage.size.width, srcPage.size.height),
-            );
+            _appendClonedPage(chunkDoc, srcDoc.pages[i]);
           }
 
           final fileName = chunkSize == 1
@@ -307,7 +311,13 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
           final targetW = (page.width * scale).round().clamp(1, 4096);
           final targetH = (page.height * scale).round().clamp(1, 4096);
 
-          final pdfImg = await page.render(width: targetW, height: targetH);
+          final pdfImg = await page.render(
+            width: targetW,
+            height: targetH,
+            fullWidth: targetW.toDouble(),
+            fullHeight: targetH.toDouble(),
+            backgroundColor: 0xffffffff,
+          );
           if (pdfImg != null) {
             final uiImg = await pdfImg.createImage();
             final pngData = await uiImg.toByteData(
@@ -320,6 +330,9 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
               final bitmap = sf.PdfBitmap(pngData.buffer.asUint8List());
               final section = outDoc.sections!.add();
               section.pageSettings.margins.all = 0;
+              section.pageSettings.orientation = page.width > page.height
+                  ? sf.PdfPageOrientation.landscape
+                  : sf.PdfPageOrientation.portrait;
               section.pageSettings.size = ui.Size(page.width, page.height);
               final newPage = section.pages.add();
               newPage.graphics.drawImage(
@@ -375,7 +388,13 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
         final w = (page.width * scale).round().clamp(1, 8192);
         final h = (page.height * scale).round().clamp(1, 8192);
 
-        final pdfImg = await page.render(width: w, height: h);
+        final pdfImg = await page.render(
+          width: w,
+          height: h,
+          fullWidth: w.toDouble(),
+          fullHeight: h.toDouble(),
+          backgroundColor: 0xffffffff,
+        );
         if (pdfImg != null) {
           final uiImg = await pdfImg.createImage();
           final pngData = await uiImg.toByteData(
@@ -404,7 +423,7 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
     }
   }
 
-  /// Adds a crisp vector watermark stamp across selected pages.
+  /// Adds a crisp vector watermark stamp across selected pages at custom normalized position or tiled.
   Future<String> addWatermark({
     required String sourcePath,
     required String outputPath,
@@ -414,6 +433,9 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
     double angleDegrees = -45,
     Color color = const Color(0xFFDC2626),
     List<int>? pageNumbers, // null = all pages
+    double xFraction = 0.5,
+    double yFraction = 0.5,
+    bool tiled = false,
   }) async {
     final bytes = await File(sourcePath).readAsBytes();
     final doc = sf.PdfDocument(inputBytes: bytes);
@@ -431,28 +453,44 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
       final textSize = font.measureString(text);
       final targetSet = pageNumbers?.toSet();
 
-      for (int i = 0; i < doc.pages.count; i++) {
-        if (targetSet != null && !targetSet.contains(i + 1)) continue;
-        final page = doc.pages[i];
-        final graphics = page.graphics;
-        final size = page.getClientSize();
-
+      void drawSingleStamp(sf.PdfGraphics graphics, double cx, double cy) {
         graphics.save();
         graphics.setTransparency(opacity.clamp(0.05, 1.0));
-        graphics.translateTransform(size.width / 2, size.height / 2);
+        graphics.translateTransform(cx, cy);
         graphics.rotateTransform(angleDegrees);
         graphics.drawString(
           text,
           font,
           brush: brush,
           bounds: ui.Rect.fromLTWH(
-            -textSize.width / 2 - 10,
+            -textSize.width / 2 - 12,
             -textSize.height / 2 - 4,
-            textSize.width + 20,
+            textSize.width + 24,
             textSize.height + 8,
           ),
         );
         graphics.restore();
+      }
+
+      for (int i = 0; i < doc.pages.count; i++) {
+        if (targetSet != null && !targetSet.contains(i + 1)) continue;
+        final page = doc.pages[i];
+        final graphics = page.graphics;
+        final size = page.getClientSize();
+
+        if (tiled) {
+          final stepX = (textSize.width + 90).clamp(140.0, size.width);
+          final stepY = (textSize.height + 100).clamp(110.0, size.height);
+          for (double y = stepY * 0.45; y < size.height; y += stepY) {
+            for (double x = stepX * 0.45; x < size.width; x += stepX) {
+              drawSingleStamp(graphics, x, y);
+            }
+          }
+        } else {
+          final cx = size.width * xFraction.clamp(0.05, 0.95);
+          final cy = size.height * yFraction.clamp(0.05, 0.95);
+          drawSingleStamp(graphics, cx, cy);
+        }
       }
 
       final outBytes = Uint8List.fromList(doc.saveSync());
@@ -632,17 +670,7 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
 
     try {
       for (int i = 0; i < srcDoc.pages.count; i++) {
-        final srcPage = srcDoc.pages[i];
-        final template = srcPage.createTemplate();
-        final section = unlockedDoc.sections!.add();
-        section.pageSettings.margins.all = 0;
-        section.pageSettings.size = srcPage.size;
-        final newPage = section.pages.add();
-        newPage.graphics.drawPdfTemplate(
-          template,
-          const ui.Offset(0, 0),
-          ui.Size(srcPage.size.width, srcPage.size.height),
-        );
+        _appendClonedPage(unlockedDoc, srcDoc.pages[i]);
       }
 
       final outBytes = Uint8List.fromList(unlockedDoc.saveSync());
@@ -782,6 +810,9 @@ extension AdvancedPdfOperations on SyncfusionPdfService {
               ? ui.Size(fixedPageSize.height, fixedPageSize.width)
               : fixedPageSize;
         }
+        section.pageSettings.orientation = targetSize.width > targetSize.height
+            ? sf.PdfPageOrientation.landscape
+            : sf.PdfPageOrientation.portrait;
         section.pageSettings.size = targetSize;
 
         final page = section.pages.add();

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/pdf_engine/pdf_thumbnail_cache.dart';
 import '../../../shared/models/document_meta.dart';
 import '../domain/library_notifier.dart';
 import '../domain/library_state.dart';
@@ -463,14 +464,26 @@ class _LibraryGridCard extends StatelessWidget {
           children: [
             Expanded(
               child: Container(
+                width: double.infinity,
                 color: isDark ? const Color(0xFF131B2A) : Colors.grey.shade100,
                 child: Stack(
-                  alignment: Alignment.center,
+                  fit: StackFit.expand,
                   children: [
-                    const Icon(
-                      Icons.picture_as_pdf,
-                      size: 44,
-                      color: Colors.redAccent,
+                    Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: PdfPageThumbnailView(
+                        documentPath: doc.path,
+                        pageNumber: 1,
+                        width: 160,
+                        height: 200,
+                        placeholder: const Center(
+                          child: Icon(
+                            Icons.picture_as_pdf,
+                            size: 40,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      ),
                     ),
                     if (isSelected)
                       const Positioned(
@@ -483,11 +496,24 @@ class _LibraryGridCard extends StatelessWidget {
                         ),
                       ),
                     Positioned(
-                      top: 4,
-                      right: 4,
-                      child: IconButton(
-                        icon: const Icon(Icons.more_vert, size: 18),
-                        onPressed: onMore,
+                      top: 2,
+                      right: 2,
+                      child: Material(
+                        color: Colors.black26,
+                        shape: const CircleBorder(),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.more_vert,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          padding: EdgeInsets.zero,
+                          onPressed: onMore,
+                        ),
                       ),
                     ),
                   ],
@@ -552,7 +578,23 @@ class _LibraryListTile extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         onLongPress: onLongPress,
-        leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            width: 38,
+            height: 48,
+            child: PdfPageThumbnailView(
+              documentPath: doc.path,
+              pageNumber: 1,
+              width: 38,
+              height: 48,
+              placeholder: const Icon(
+                Icons.picture_as_pdf,
+                color: Colors.redAccent,
+              ),
+            ),
+          ),
+        ),
         title: Text(
           doc.name,
           maxLines: 1,

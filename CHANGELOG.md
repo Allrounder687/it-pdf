@@ -5,6 +5,20 @@ All notable changes to the **IT PDF** project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1+4] - 2026-11-12
+
+### Added
+- **AI Document Assistant Cloud Settings UI:** Added Provider selector (`Offline Grounded Engine`, `Google Gemini API`, `OpenAI / Compatible API`), secure API key storage, model override, optional custom base URL, and quick access directly from `SettingsScreen` and the `AiAssistantSheet` header.
+- **Direct On-Canvas Watermark Manipulation:** Added drag-to-reposition, corner drag handle for live rotation/resizing, real page-1 PDF preview, Center reset, and full-page Tile mode in `WatermarkTool`.
+- **Android & iOS File Export:** Added native SAF / system Share Sheet export (`exportFileToDevice`) cleanly isolated from internal app-sandbox output paths.
+
+### Fixed
+- **PDF Thumbnail Cache & Covers (`PdfThumbnailCache`):** Fixed `pdfrx` `TypeError` on custom cancellation tokens and passed explicit `fullWidth`/`fullHeight` dimensions so covers and sidebar thumbnails render sharply across Library, Home, and Desktop Reader.
+- **Merge & Split Landscape Clipping (`SyncfusionPdfService`):** Explicitly synced `section.pageSettings.orientation` alongside `size` so merged/split/compressed/extracted landscape certificates preserve full width without right-edge cropping.
+- **PDF-to-Image Zoomed-Out Export:** Passed explicit target `fullWidth`/`fullHeight` pixel dimensions to `page.render` so exported PNGs fill the entire canvas crisply.
+- **Mobile Pinch-Zoom & Touch Scrolling (`ReaderScreen`):** Replaced infinite `boundaryMargin` (which caused zero fit-width zoom and outer-canvas zoom) with finite bounds, gated `AnnotationOverlay` pointer hit-testing via `IgnorePointer`, and enabled native touch scrolling without needing to drag the scrollbar.
+- **Android/iOS Read-Only `/document` Crash (`errno = 30`):** Routed mobile output paths cleanly into `getApplicationDocumentsDirectory()` instead of writing directly to SAF virtual `/document/...` paths, and added mobile storage/sharing manifest & `Info.plist` entries.
+
 ## [1.2.0+3] - 2026-11-12
 
 ### Added

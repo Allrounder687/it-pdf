@@ -7,16 +7,35 @@ import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import '../logging/app_logger.dart';
 
+/// Lightweight cancellation handle wrapping a native pdfrx token once created.
+class ThumbnailCancelHandle {
+  bool _isCanceled = false;
+  PdfPageRenderCancellationToken? _nativeToken;
+
+  bool get isCanceled => _isCanceled;
+
+  void bindNative(PdfPageRenderCancellationToken token) {
+    _nativeToken = token;
+    if (_isCanceled) {
+      token.cancel();
+    }
+  }
+
+  void cancel() {
+    _isCanceled = true;
+    _nativeToken?.cancel();
+  }
+}
+
 /// LRU-cached asynchronous page thumbnail rendering service.
-/// Uses PDFium to render vector-accurate preview thumbnails with cancellation support.
+/// Uses PDFium to render vector-accurate preview thumbnails with full-page scaling.
 class PdfThumbnailCache {
   static final PdfThumbnailCache instance = PdfThumbnailCache._internal();
   PdfThumbnailCache._internal();
 
   factory PdfThumbnailCache() => instance;
 
-  // Maximum number of thumbnails cached in memory
-  static const int _maxCacheEntries = 120;
+  static const int _maxCacheEntries = 140;
 
   // Key: "$filePath:$pageNumber:$targetWidth" -> PNG bytes
   final LinkedHashMap<String, Uint8List> _memoryCache = LinkedHashMap();
@@ -33,7 +52,6 @@ class PdfThumbnailCache {
   }) {
     final key = _cacheKey(path, pageNumber, width);
     if (_memoryCache.containsKey(key)) {
-      // Move to back (most recently used)
       final value = _memoryCache.remove(key)!;
       _memoryCache[key] = value;
       return value;
@@ -46,18 +64,16 @@ class PdfThumbnailCache {
     required String path,
     required int pageNumber, // 1-based page number
     int width = 180,
-    PdfPageRenderCancellationToken? cancellationToken,
+    ThumbnailCancelHandle? cancelHandle,
   }) async {
     final key = _cacheKey(path, pageNumber, width);
 
-    // Check memory cache
     if (_memoryCache.containsKey(key)) {
       final value = _memoryCache.remove(key)!;
       _memoryCache[key] = value;
       return value;
     }
 
-    // Coalesce duplicate concurrent requests
     if (_inFlightRenders.containsKey(key)) {
       return _inFlightRenders[key];
     }
@@ -66,7 +82,7 @@ class PdfThumbnailCache {
       path: path,
       pageNumber: pageNumber,
       width: width,
-      cancellationToken: cancellationToken,
+      cancelHandle: cancelHandle,
     );
 
     _inFlightRenders[key] = future;
@@ -86,24 +102,34 @@ class PdfThumbnailCache {
     required String path,
     required int pageNumber,
     required int width,
-    PdfPageRenderCancellationToken? cancellationToken,
+    ThumbnailCancelHandle? cancelHandle,
   }) async {
     final file = File(path);
     if (!await file.exists()) return null;
 
     PdfDocument? document;
+    PdfImage? pdfImage;
     try {
       document = await PdfDocument.openFile(path);
       if (pageNumber < 1 || pageNumber > document.pages.length) return null;
+      if (cancelHandle?.isCanceled ?? false) return null;
 
       final page = document.pages[pageNumber - 1];
-      final aspectRatio = page.height / page.width;
-      final height = (width * aspectRatio).round();
+      final nativeToken = page.createCancellationToken();
+      cancelHandle?.bindNative(nativeToken);
 
-      final pdfImage = await page.render(
-        width: width,
-        height: height,
-        cancellationToken: cancellationToken,
+      final aspectRatio = page.width > 0 ? (page.height / page.width) : 1.414;
+      final targetW = width.clamp(80, 600);
+      final targetH = (targetW * aspectRatio).round().clamp(80, 800);
+
+      // CRITICAL: Pass fullWidth & fullHeight so PDFium scales the page to fill the thumbnail!
+      pdfImage = await page.render(
+        width: targetW,
+        height: targetH,
+        fullWidth: targetW.toDouble(),
+        fullHeight: targetH.toDouble(),
+        backgroundColor: 0xffffffff,
+        cancellationToken: nativeToken,
       );
 
       if (pdfImage == null) return null;
@@ -118,6 +144,7 @@ class PdfThumbnailCache {
       AppLogger.warn('Thumbnail render error for $path (p. $pageNumber): $e');
       return null;
     } finally {
+      pdfImage?.dispose();
       await document?.dispose();
     }
   }
@@ -174,7 +201,9 @@ class PdfPageThumbnailView extends StatefulWidget {
 class _PdfPageThumbnailViewState extends State<PdfPageThumbnailView> {
   Uint8List? _bytes;
   bool _isLoading = true;
-  PdfPageRenderCancellationToken? _cancelToken;
+  ThumbnailCancelHandle? _cancelHandle;
+
+  int get _renderWidth => (widget.width * 2).round().clamp(140, 480);
 
   @override
   void initState() {
@@ -187,14 +216,14 @@ class _PdfPageThumbnailViewState extends State<PdfPageThumbnailView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.documentPath != widget.documentPath ||
         oldWidget.pageNumber != widget.pageNumber) {
-      _cancelToken?.cancel();
+      _cancelHandle?.cancel();
       _loadThumbnail();
     }
   }
 
   @override
   void dispose() {
-    _cancelToken?.cancel();
+    _cancelHandle?.cancel();
     super.dispose();
   }
 
@@ -202,7 +231,7 @@ class _PdfPageThumbnailViewState extends State<PdfPageThumbnailView> {
     final cached = PdfThumbnailCache.instance.getCachedThumbnail(
       widget.documentPath,
       widget.pageNumber,
-      width: widget.width.round(),
+      width: _renderWidth,
     );
 
     if (cached != null) {
@@ -215,18 +244,20 @@ class _PdfPageThumbnailViewState extends State<PdfPageThumbnailView> {
       return;
     }
 
-    setState(() => _isLoading = true);
-    final token = _ThumbnailCancellationToken();
-    _cancelToken = token;
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
+    final handle = ThumbnailCancelHandle();
+    _cancelHandle = handle;
 
     final bytes = await PdfThumbnailCache.instance.renderThumbnail(
       path: widget.documentPath,
       pageNumber: widget.pageNumber,
-      width: widget.width.round(),
-      cancellationToken: token,
+      width: _renderWidth,
+      cancelHandle: handle,
     );
 
-    if (mounted && !token.isCanceled) {
+    if (mounted && !handle.isCanceled) {
       setState(() {
         _bytes = bytes;
         _isLoading = false;
@@ -274,17 +305,5 @@ class _PdfPageThumbnailViewState extends State<PdfPageThumbnailView> {
       );
     }
     return child;
-  }
-}
-
-class _ThumbnailCancellationToken implements PdfPageRenderCancellationToken {
-  bool _isCanceled = false;
-
-  @override
-  bool get isCanceled => _isCanceled;
-
-  @override
-  void cancel() {
-    _isCanceled = true;
   }
 }

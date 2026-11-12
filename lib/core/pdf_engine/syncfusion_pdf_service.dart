@@ -58,7 +58,14 @@ class SyncfusionPdfService {
           for (int i = 0; i < srcDoc.pages.count; i++) {
             final page = srcDoc.pages[i];
             final template = page.createTemplate();
-            final newPage = mergedDoc.pages.add();
+            final section = mergedDoc.sections!.add();
+            section.pageSettings.margins.all = 0;
+            section.pageSettings.orientation =
+                page.size.width > page.size.height
+                ? sf.PdfPageOrientation.landscape
+                : sf.PdfPageOrientation.portrait;
+            section.pageSettings.size = page.size;
+            final newPage = section.pages.add();
             newPage.graphics.drawPdfTemplate(
               template,
               const Offset(0, 0),
@@ -134,13 +141,22 @@ class SyncfusionPdfService {
               final srcPage = sourceDoc.pages[pageNum - 1];
               final template = srcPage.createTemplate();
               final section = newDoc.sections!.add();
+              section.pageSettings.margins.all = 0;
+              section.pageSettings.orientation =
+                  srcPage.size.width > srcPage.size.height
+                  ? sf.PdfPageOrientation.landscape
+                  : sf.PdfPageOrientation.portrait;
               section.pageSettings.size = srcPage.size;
               final rotDegrees = pageRotations[pageNum] ?? 0;
               if (rotDegrees > 0) {
                 section.pageSettings.rotate = _mapRotation(rotDegrees);
               }
               final newPage = section.pages.add();
-              newPage.graphics.drawPdfTemplate(template, const Offset(0, 0));
+              newPage.graphics.drawPdfTemplate(
+                template,
+                const Offset(0, 0),
+                Size(srcPage.size.width, srcPage.size.height),
+              );
             }
           }
           outputBytes = Uint8List.fromList(newDoc.saveSync());

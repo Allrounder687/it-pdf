@@ -77,20 +77,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       _searcher = PdfTextSearcher(controller);
     });
 
-    // Ensure initial page is actively positioned and rendered without requiring interaction
+    // Ensure initial page is fitted to readable width without requiring user zoom
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && controller.isReady) {
         final targetPage = widget.params.initialPage.clamp(
           1,
           document.pages.length,
         );
-        if (targetPage > 1) {
+        final matrix = controller.calcMatrixFitWidthForPage(
+          pageNumber: targetPage,
+        );
+        if (matrix != null) {
+          controller.goTo(matrix, duration: Duration.zero);
+        } else if (targetPage > 1) {
           controller.goToPage(pageNumber: targetPage);
-        } else {
-          final matrix = controller.calcMatrixFitWidthForPage(pageNumber: 1);
-          if (matrix != null) {
-            controller.goTo(matrix);
-          }
         }
       }
     });
@@ -364,18 +364,28 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       backgroundColor: isDark
                           ? const Color(0xFF0F172A)
                           : const Color(0xFFF1F5F9),
-                      boundaryMargin: const EdgeInsets.all(double.infinity),
+                      boundaryMargin: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 20,
+                      ),
+                      panEnabled: !isToolActive,
+                      scaleEnabled: !isToolActive,
                       scrollByMouseWheel: 1.0,
                       scaleByPointerScale: 1.0,
                       enableKeyboardNavigation: true,
                       scrollByArrowKey: 50.0,
+                      textSelectionParams: const PdfTextSelectionParams(
+                        enabled: true,
+                        enableSelectionHandles: true,
+                      ),
                       sizeDelegateProvider:
-                          const PdfViewerSizeDelegateProviderLegacy(),
-                      interactionDelegateProvider:
-                          const PdfViewerScrollInteractionDelegateProviderPhysics(
-                            panFriction: 11.0,
-                            zoomFriction: 11.0,
+                          const PdfViewerSizeDelegateProviderLegacy(
+                            maxScale: 10.0,
+                            minScale: 0.25,
+                            useAlternativeFitScaleAsMinScale: true,
                           ),
+                      interactionDelegateProvider:
+                          const PdfViewerScrollInteractionDelegateProviderInstant(),
                       layoutPages: (pages, p) =>
                           ReaderScreen.calculatePageLayout(
                             pages,

@@ -7,6 +7,8 @@ import '../../../../core/providers.dart';
 import '../../../annotations/domain/annotation_notifier.dart';
 import '../../../library/domain/library_notifier.dart';
 import '../../../reader/domain/document_tabs_notifier.dart';
+import '../../../reader/domain/reader_notifier.dart';
+import '../../../reader/presentation/reader_screen.dart';
 import 'pdf_tool_model.dart';
 
 class CompressPdfTool extends PdfTool {
@@ -299,20 +301,66 @@ class _CompressPdfStudioScreenState
                           style: const TextStyle(fontSize: 12),
                         ),
                         const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: () async {
-                            final doc = await ref
-                                .read(libraryNotifierProvider.notifier)
-                                .importFileFromPath(_result!.outputPath);
-                            if (doc != null && context.mounted) {
-                              ref
-                                  .read(documentTabsNotifierProvider.notifier)
-                                  .openTab(doc);
-                              Navigator.of(context).pop();
-                            }
-                          },
-                          icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                          label: const Text('Open Compressed PDF'),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: () async {
+                                final doc = await ref
+                                    .read(libraryNotifierProvider.notifier)
+                                    .importFileFromPath(_result!.outputPath);
+                                if (doc != null && context.mounted) {
+                                  final isDesktop =
+                                      MediaQuery.of(context).size.width >= 800;
+                                  if (isDesktop) {
+                                    ref
+                                        .read(
+                                          documentTabsNotifierProvider.notifier,
+                                        )
+                                        .openTab(doc);
+                                    Navigator.of(context).pop();
+                                  } else {
+                                    await Navigator.of(context).pushReplacement(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => ReaderScreen(
+                                          params: ReaderNotifierParams(
+                                            id: doc.id,
+                                            name: doc.name,
+                                            path: doc.path,
+                                            initialPage: 1,
+                                            initialPageCount: doc.totalPages,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                              icon: const Icon(
+                                Icons.open_in_new_rounded,
+                                size: 16,
+                              ),
+                              label: const Text('Open Compressed PDF'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                await ref
+                                    .read(filePickerServiceProvider)
+                                    .exportFileToDevice(
+                                      sourceFilePath: _result!.outputPath,
+                                      exportFileName: p.basename(
+                                        _result!.outputPath,
+                                      ),
+                                    );
+                              },
+                              icon: const Icon(
+                                Icons.ios_share_rounded,
+                                size: 16,
+                              ),
+                              label: const Text('Export / Share'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
