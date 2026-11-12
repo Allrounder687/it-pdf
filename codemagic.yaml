@@ -144,6 +144,7 @@ workflows:
           APP_VER=$(grep "version:" pubspec.yaml | head -n 1 | awk '{print $2}')
           COMMIT_HASH=$(git rev-parse --short HEAD)
           flutter build apk --release \
+            --android-skip-build-dependency-validation \
             --dart-define=APP_VERSION="$APP_VER" \
             --dart-define=GIT_COMMIT_HASH="$COMMIT_HASH"
           mkdir -p releases
